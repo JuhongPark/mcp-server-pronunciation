@@ -48,22 +48,60 @@ SUBSTITUTION_HINTS: dict[tuple[str, str], str] = {
 }
 
 # Words that reveal common Korean pronunciation patterns
-_TH_WORDS = {"the", "this", "that", "think", "three", "through", "with",
-             "math", "both", "bath", "thought", "thoroughly", "brother"}
-_F_WORDS = {"five", "four", "first", "feel", "fine", "for", "from",
-            "free", "off", "if", "future", "before"}
+_TH_WORDS = {
+    "the",
+    "this",
+    "that",
+    "think",
+    "three",
+    "through",
+    "with",
+    "math",
+    "both",
+    "bath",
+    "thought",
+    "thoroughly",
+    "brother",
+}
+_F_WORDS = {
+    "five",
+    "four",
+    "first",
+    "feel",
+    "fine",
+    "for",
+    "from",
+    "free",
+    "off",
+    "if",
+    "future",
+    "before",
+}
 _V_WORDS = {"very", "have", "over", "every", "never", "give", "live", "value"}
-_RL_WORDS = {"right", "light", "read", "lead", "rice", "lice", "really",
-             "world", "girl", "long", "wrong"}
+_RL_WORDS = {
+    "right",
+    "light",
+    "read",
+    "lead",
+    "rice",
+    "lice",
+    "really",
+    "world",
+    "girl",
+    "long",
+    "wrong",
+}
 
 
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class WordResult:
     """Assessment result for a single word."""
+
     word: str
     start: float
     end: float
@@ -74,6 +112,7 @@ class WordResult:
 @dataclass
 class AssessmentResult:
     """Full pronunciation assessment result."""
+
     transcript: str
     reference_text: str | None
     words: list[WordResult] = field(default_factory=list)
@@ -125,7 +164,9 @@ class AssessmentResult:
         # Compact summary line
         confidence_pct = self.avg_confidence * 100
         wpm = self.words_per_minute
-        lines.append(f"**Clarity:** {confidence_pct:.0f}% | **Speed:** {wpm:.0f} WPM | ", )
+        lines.append(
+            f"**Clarity:** {confidence_pct:.0f}% | **Speed:** {wpm:.0f} WPM | ",
+        )
 
         if wpm < 100:
             lines[-1] += "Slow — try speaking a bit faster"
@@ -143,23 +184,22 @@ class AssessmentResult:
             lines.append("### What to fix")
             for ref_word, heard_word, hint in mismatches:
                 if heard_word == "(skipped)":
-                    lines.append(f"- **\"{ref_word}\"** — skipped or too quiet")
+                    lines.append(f'- **"{ref_word}"** — skipped or too quiet')
                 elif heard_word == "(extra)":
                     pass  # Don't show extra words as errors
                 else:
-                    lines.append(f"- **\"{ref_word}\"** → heard **\"{heard_word}\"**")
+                    lines.append(f'- **"{ref_word}"** → heard **"{heard_word}"**')
                     if hint:
                         lines.append(f"  - {hint}")
             lines.append("")
 
         # Low confidence words (only those not already in mismatches)
         mismatch_words = {m[0] for m in mismatches}
-        low_conf = [w for w in self.low_confidence_words
-                    if w.word.lower() not in mismatch_words]
+        low_conf = [w for w in self.low_confidence_words if w.word.lower() not in mismatch_words]
         if low_conf:
             lines.append("### Unclear words")
             for w in low_conf:
-                lines.append(f"- **\"{w.word}\"** ({w.probability:.0%} confidence)")
+                lines.append(f'- **"{w.word}"** ({w.probability:.0%} confidence)')
             lines.append("")
 
         # Pauses
@@ -228,30 +268,26 @@ class AssessmentResult:
         # Check each phoneme group
         th_spoken = spoken_words & _TH_WORDS
         if th_spoken:
-            low = [w for w in self.low_confidence_words
-                   if w.word.lower() in _TH_WORDS]
+            low = [w for w in self.low_confidence_words if w.word.lower() in _TH_WORDS]
             if low:
                 words_str = ", ".join(w.word for w in low)
                 tips.append(f"/θ/ and /ð/: Place tongue between teeth. Check: {words_str}")
 
         f_spoken = spoken_words & _F_WORDS
         if f_spoken:
-            low = [w for w in self.low_confidence_words
-                   if w.word.lower() in _F_WORDS]
+            low = [w for w in self.low_confidence_words if w.word.lower() in _F_WORDS]
             if low:
                 tips.append("/f/: Bite lower lip gently and blow. Don't use both lips (/p/).")
 
         v_spoken = spoken_words & _V_WORDS
         if v_spoken:
-            low = [w for w in self.low_confidence_words
-                   if w.word.lower() in _V_WORDS]
+            low = [w for w in self.low_confidence_words if w.word.lower() in _V_WORDS]
             if low:
                 tips.append("/v/: Bite lower lip and vibrate vocal cords. Not /b/.")
 
         rl_spoken = spoken_words & _RL_WORDS
         if rl_spoken:
-            low = [w for w in self.low_confidence_words
-                   if w.word.lower() in _RL_WORDS]
+            low = [w for w in self.low_confidence_words if w.word.lower() in _RL_WORDS]
             if low:
                 tips.append("/r/ vs /l/: For /r/ curl tongue back. For /l/ touch tongue to ridge.")
 
@@ -276,6 +312,7 @@ def _detect_device() -> tuple[str, str]:
     """Auto-detect the best device and compute type."""
     try:
         import ctranslate2
+
         if "cuda" in ctranslate2.get_supported_compute_types("cuda"):
             logger.info("CUDA detected, using GPU")
             return "cuda", "float16"
@@ -294,8 +331,12 @@ class PronunciationAssessor:
 
     def _get_model(self) -> WhisperModel:
         if self._model is None:
-            logger.info("Loading Whisper model '%s' on %s (%s)...",
-                        self._model_size, self._device, self._compute_type)
+            logger.info(
+                "Loading Whisper model '%s' on %s (%s)...",
+                self._model_size,
+                self._device,
+                self._compute_type,
+            )
             self._model = WhisperModel(
                 self._model_size,
                 device=self._device,

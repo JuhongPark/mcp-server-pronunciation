@@ -32,6 +32,7 @@ def _make_result(
 
 # --- _normalize_words ---
 
+
 class TestNormalizeWords:
     def test_basic(self):
         assert _normalize_words("Hello World") == ["hello", "world"]
@@ -47,6 +48,7 @@ class TestNormalizeWords:
 
 
 # --- Word alignment (SequenceMatcher) ---
+
 
 class TestFindMismatches:
     def test_exact_match_no_mismatches(self):
@@ -96,6 +98,7 @@ class TestFindMismatches:
 
 # --- Scoring ---
 
+
 class TestScoring:
     def test_avg_confidence(self):
         words = [
@@ -138,6 +141,7 @@ class TestScoring:
 
 # --- Pauses ---
 
+
 class TestPauses:
     def test_detects_long_pause(self):
         words = [
@@ -159,6 +163,7 @@ class TestPauses:
 
 
 # --- Report formatting ---
+
 
 class TestFormatReport:
     def test_excellent_report(self):
@@ -183,6 +188,7 @@ class TestFormatReport:
 
 
 # --- Korean tips ---
+
 
 class TestKoreanTips:
     def test_th_words_with_low_confidence(self):

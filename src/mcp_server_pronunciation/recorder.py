@@ -48,7 +48,9 @@ def _ps1_win_path() -> str:
     """Get Windows path for the PS1 script (cached)."""
     return subprocess.run(
         ["wslpath", "-w", str(_PS1_SCRIPT)],
-        capture_output=True, text=True, check=True,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout.strip()
 
 
@@ -84,10 +86,11 @@ def record_audio(duration: float, output_path: Path | None = None) -> Path:
 def _rms(data) -> float:
     """Calculate RMS (root mean square) of int16 audio data."""
     import numpy as np
+
     samples = np.frombuffer(data, dtype=np.int16).astype(np.float64)
     if len(samples) == 0:
         return 0.0
-    return float(np.sqrt(np.mean(samples ** 2)))
+    return float(np.sqrt(np.mean(samples**2)))
 
 
 def _record_sounddevice_vad(duration: float, output_path: Path) -> None:
@@ -106,6 +109,7 @@ def _record_sounddevice_vad(duration: float, output_path: Path) -> None:
     stop_event = threading.Event()
 
     import time
+
     record_start = time.monotonic()
 
     def callback(indata, frames, time_info, status):
@@ -129,8 +133,10 @@ def _record_sounddevice_vad(duration: float, output_path: Path) -> None:
             if level < _VAD_SILENCE_THRESHOLD:
                 if silence_start is None:
                     silence_start = elapsed
-                elif (elapsed - silence_start > _VAD_SILENCE_DURATION
-                      and elapsed > _VAD_MIN_SPEECH + 1.0):
+                elif (
+                    elapsed - silence_start > _VAD_SILENCE_DURATION
+                    and elapsed > _VAD_MIN_SPEECH + 1.0
+                ):
                     logger.debug("Auto-stop: silence for %.1fs", elapsed - silence_start)
                     stop_event.set()
                     raise sd.CallbackAbort
@@ -171,13 +177,21 @@ def _record_wsl(duration: float, output_path: Path) -> None:
 
     result = subprocess.run(
         [
-            "powershell.exe", "-ExecutionPolicy", "Bypass",
-            "-File", ps1_win,
-            "-Duration", str(int(duration)),
-            "-OutputPath", win_temp,
-            "-SampleRate", str(SAMPLE_RATE),
+            "powershell.exe",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            ps1_win,
+            "-Duration",
+            str(int(duration)),
+            "-OutputPath",
+            win_temp,
+            "-SampleRate",
+            str(SAMPLE_RATE),
         ],
-        capture_output=True, text=True, timeout=duration + 30,
+        capture_output=True,
+        text=True,
+        timeout=duration + 30,
     )
 
     if result.returncode != 0:
@@ -189,6 +203,7 @@ def _record_wsl(duration: float, output_path: Path) -> None:
     win_temp_wsl = Path(win_temp_unix)
 
     import shutil
+
     shutil.copy2(win_temp_wsl, output_path)
     try:
         win_temp_wsl.unlink()
@@ -208,13 +223,16 @@ def check_audio_devices() -> str:
         lines.append("Platform: Native (recording via sounddevice with VAD auto-stop)")
         try:
             import sounddevice as sd
+
             default_input = sd.query_devices(kind="input")
             lines.append(f"Default input: {default_input['name']}")
             devices = sd.query_devices()
             input_devices = [d for d in devices if d["max_input_channels"] > 0]
             lines.append(f"Input devices ({len(input_devices)}):")
             for d in input_devices:
-                lines.append(f"  - {d['name']} ({d['max_input_channels']}ch, {d['default_samplerate']:.0f}Hz)")
+                lines.append(
+                    f"  - {d['name']} ({d['max_input_channels']}ch, {d['default_samplerate']:.0f}Hz)"
+                )
         except ImportError:
             lines.append("WARNING: sounddevice not installed. Run: pip install sounddevice")
         except Exception as e:

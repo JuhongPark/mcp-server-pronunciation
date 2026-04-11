@@ -32,6 +32,7 @@ def _get_assessor() -> PronunciationAssessor:
 
 def _preload_model() -> None:
     """Pre-load Whisper model in background so first practice call is fast."""
+
     def _load():
         try:
             assessor = _get_assessor()
@@ -39,6 +40,7 @@ def _preload_model() -> None:
             logger.info("Whisper model pre-loaded")
         except Exception as e:
             logger.warning("Failed to pre-load Whisper model: %s", e)
+
     thread = threading.Thread(target=_load, daemon=True)
     thread.start()
 
