@@ -9,7 +9,6 @@ Supports:
 from __future__ import annotations
 
 import os
-import struct
 import subprocess
 import tempfile
 import wave
@@ -65,7 +64,6 @@ def record_audio(duration: float, output_path: Path | None = None) -> Path:
 def _record_sounddevice(duration: float, output_path: Path) -> None:
     """Record via sounddevice (macOS, native Linux, native Windows)."""
     try:
-        import numpy as np
         import sounddevice as sd
     except ImportError:
         raise RuntimeError(
