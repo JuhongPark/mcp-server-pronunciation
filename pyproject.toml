@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "MCP server for English pronunciation practice — record, transcribe with Whisper, and get word-level feedback"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [
     { name = "Juhong Park" },
 ]
@@ -49,5 +49,5 @@ packages = ["src/mcp_server_pronunciation"]
 testpaths = ["tests"]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 100

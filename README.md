@@ -13,7 +13,7 @@ An MCP (Model Context Protocol) server for English pronunciation practice. Recor
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.11+
 - A working microphone
 - Disk space for Whisper model (~140 MB for `base`, ~1.5 GB for `large-v3-turbo`)
 
