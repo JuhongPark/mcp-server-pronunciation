@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import random
 import tempfile
 from pathlib import Path
 
@@ -9,12 +11,13 @@ from mcp.server.fastmcp import FastMCP
 
 from .assessor import PronunciationAssessor
 from .recorder import check_audio_devices, record_audio
+from .sentences import SENTENCES
+
+logger = logging.getLogger(__name__)
 
 mcp = FastMCP("pronunciation")
 
-# Lazy-loaded assessor (loads Whisper model on first use)
 _assessor: PronunciationAssessor | None = None
-# Store the last recorded file path for assess to use
 _last_recording: Path | None = None
 
 
@@ -23,6 +26,13 @@ def _get_assessor() -> PronunciationAssessor:
     if _assessor is None:
         _assessor = PronunciationAssessor()
     return _assessor
+
+
+def _new_recording_path() -> Path:
+    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False, prefix="pronun_")
+    path = Path(tmp.name)
+    tmp.close()
+    return path
 
 
 @mcp.tool()
@@ -34,15 +44,11 @@ def record(duration: float = 10.0) -> str:
         duration: Recording duration in seconds (default 10, max 120).
 
     Returns:
-        Path to the recorded WAV file and recording info.
+        Path to the recorded WAV file.
     """
     global _last_recording
-
     duration = min(max(duration, 1.0), 120.0)
-
-    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False, prefix="pronun_")
-    output_path = Path(tmp.name)
-    tmp.close()
+    output_path = _new_recording_path()
 
     record_audio(duration, output_path)
     _last_recording = output_path
@@ -56,7 +62,7 @@ def assess(reference_text: str | None = None, audio_path: str | None = None) -> 
     Assess pronunciation of the last recording (or a specific audio file).
 
     Transcribes the audio using Whisper and provides word-level pronunciation
-    feedback including clarity scores, fluency metrics, and Korean-speaker tips.
+    feedback including clarity scores, fluency metrics, and language-specific tips.
 
     Args:
         reference_text: Expected text the speaker was trying to say (optional).
@@ -100,12 +106,8 @@ def practice(
         Detailed pronunciation assessment report.
     """
     global _last_recording
-
     duration = min(max(duration, 1.0), 120.0)
-
-    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False, prefix="pronun_")
-    output_path = Path(tmp.name)
-    tmp.close()
+    output_path = _new_recording_path()
 
     record_audio(duration, output_path)
     _last_recording = output_path
@@ -113,6 +115,42 @@ def practice(
     assessor = _get_assessor()
     result = assessor.assess(output_path, reference_text=reference_text)
     return result.format_report()
+
+
+@mcp.tool()
+def suggest_sentence(
+    focus: str | None = None,
+    difficulty: str | None = None,
+) -> str:
+    """
+    Suggest a practice sentence for pronunciation practice.
+
+    Args:
+        focus: Phoneme focus area. Options: "th", "f_v", "r_l", "vowels", "general".
+            If not specified, picks randomly.
+        difficulty: Difficulty level. Options: "beginner", "intermediate", "advanced".
+            If not specified, picks randomly.
+
+    Returns:
+        A practice sentence with its focus area and difficulty.
+    """
+    pool = SENTENCES
+
+    if focus:
+        pool = [s for s in pool if s["focus"] == focus]
+    if difficulty:
+        pool = [s for s in pool if s["difficulty"] == difficulty]
+
+    if not pool:
+        return "No sentences match that filter. Try: focus=th/f_v/r_l/vowels/general, difficulty=beginner/intermediate/advanced"
+
+    sentence = random.choice(pool)
+    return (
+        f"**Practice this:**\n\n"
+        f"> {sentence['text']}\n\n"
+        f"**Focus:** {sentence['focus']} | **Difficulty:** {sentence['difficulty']}\n\n"
+        f"When ready, use the `practice` tool with this sentence."
+    )
 
 
 @mcp.tool()
