@@ -24,6 +24,12 @@ dependencies = [
     "numpy>=1.24",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+]
+
 [project.scripts]
 mcp-server-pronunciation = "mcp_server_pronunciation:run"
 
@@ -38,3 +44,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mcp_server_pronunciation"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
