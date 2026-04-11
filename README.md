@@ -8,7 +8,7 @@ An MCP (Model Context Protocol) server for English pronunciation practice. Recor
 - **Transcribe** with OpenAI Whisper (via faster-whisper) with word-level timestamps
 - **Assess** pronunciation with confidence scores, fluency metrics, and mismatch detection
 - **Practice** mode: read a sentence aloud and get instant comparison feedback
-- **Korean-speaker tips**: targeted feedback for common pronunciation challenges (/θ/, /f/, /v/, /r/, /l/)
+- **Language-specific tips**: pronunciation feedback tailored to your native language (currently supports Korean; more languages welcome via PR)
 
 ## Requirements
 
