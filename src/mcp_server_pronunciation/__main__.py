@@ -1,5 +1,7 @@
 """Allow running as python -m mcp_server_pronunciation."""
 
-from .server import run
+import sys
 
-run()
+from .cli import main
+
+raise SystemExit(main(sys.argv[1:]))
