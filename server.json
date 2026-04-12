@@ -1,0 +1,37 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.juhongpark/pronunciation",
+  "title": "Pronunciation & Voice Coach",
+  "description": "MCP server for voice conversation with Claude plus English pronunciation, grammar, and fluency feedback — runs locally with faster-whisper.",
+  "version": "0.2.0",
+  "repository": {
+    "url": "https://github.com/JuhongPark/mcp-server-pronunciation",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "mcp-server-pronunciation",
+      "version": "0.2.0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "MCP_PRONUNCIATION_MODEL",
+          "description": "faster-whisper model size. Default: base.en. Options: tiny.en, base.en, small.en, medium.en, large-v3, large-v3-turbo.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "HF_HUB_CACHE",
+          "description": "Override Hugging Face Hub cache directory where Whisper weights are stored.",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}
