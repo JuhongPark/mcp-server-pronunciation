@@ -492,7 +492,7 @@ cli = [
 
 [[package]]
 name = "mcp-server-pronunciation"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "faster-whisper" },
@@ -509,12 +509,12 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "faster-whisper", specifier = ">=1.0" },
-    { name = "mcp", extras = ["cli"], specifier = ">=1.0.0" },
-    { name = "numpy", specifier = ">=1.24" },
+    { name = "faster-whisper", specifier = ">=1.0,<2" },
+    { name = "mcp", extras = ["cli"], specifier = ">=1.2,<2" },
+    { name = "numpy", specifier = ">=1.24,<3" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
-    { name = "sounddevice", specifier = ">=0.4" },
+    { name = "sounddevice", specifier = ">=0.4,<0.6" },
 ]
 provides-extras = ["dev"]
 
