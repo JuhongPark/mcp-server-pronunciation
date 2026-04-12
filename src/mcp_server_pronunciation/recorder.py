@@ -11,6 +11,7 @@ from __future__ import annotations
 import functools
 import logging
 import os
+import platform
 import subprocess
 import tempfile
 import threading
@@ -22,6 +23,51 @@ logger = logging.getLogger(__name__)
 SAMPLE_RATE = 16000  # 16kHz — optimal for Whisper
 CHANNELS = 1
 SAMPLE_WIDTH = 2  # 16-bit
+
+
+def _portaudio_install_hint() -> str:
+    """Return a platform-specific install hint for missing PortAudio."""
+    system = platform.system()
+    if system == "Linux":
+        return (
+            "PortAudio shared library not found.\n"
+            "Install it:\n"
+            "  Debian/Ubuntu:  sudo apt-get install libportaudio2\n"
+            "  Fedora/RHEL:    sudo dnf install portaudio\n"
+            "  Arch:           sudo pacman -S portaudio\n"
+            "On PipeWire-only systems you may also need: sudo apt-get install pipewire-alsa"
+        )
+    if system == "Darwin":
+        return (
+            "PortAudio should ship inside the sounddevice wheel on macOS — "
+            "this is unexpected. Try reinstalling sounddevice:\n"
+            "  uv pip install --force-reinstall sounddevice"
+        )
+    if system == "Windows":
+        return (
+            "PortAudio should ship inside the sounddevice wheel on Windows — "
+            "this is unexpected. Try reinstalling sounddevice:\n"
+            "  uv pip install --force-reinstall sounddevice"
+        )
+    return "PortAudio library not found. Install it for your platform."
+
+
+def _import_sounddevice():
+    """Import sounddevice with a helpful error if PortAudio is missing."""
+    try:
+        import sounddevice as sd
+    except OSError as e:
+        msg = str(e)
+        if "portaudio" in msg.lower() or "PortAudio" in msg:
+            raise RuntimeError(f"{_portaudio_install_hint()}\n\nOriginal error: {e}") from e
+        raise
+    except ImportError as e:
+        raise RuntimeError(
+            "sounddevice is not installed. Reinstall this package:\n"
+            "  uv tool install --reinstall mcp-server-pronunciation"
+        ) from e
+    return sd
+
 
 # Bundled PowerShell script for WSL recording
 _PS1_SCRIPT = Path(__file__).parent / "record_mic.ps1"
@@ -95,13 +141,7 @@ def _rms(data) -> float:
 
 def _record_sounddevice_vad(duration: float, output_path: Path) -> None:
     """Record with voice activity detection — auto-stops after speech ends."""
-    try:
-        import sounddevice as sd
-    except ImportError:
-        raise RuntimeError(
-            "sounddevice is required for recording on this platform. "
-            "Install it with: pip install sounddevice numpy"
-        )
+    sd = _import_sounddevice()
 
     chunks: list[bytes] = []
     speech_detected = False
@@ -222,8 +262,7 @@ def check_audio_devices() -> str:
     else:
         lines.append("Platform: Native (recording via sounddevice with VAD auto-stop)")
         try:
-            import sounddevice as sd
-
+            sd = _import_sounddevice()
             default_input = sd.query_devices(kind="input")
             lines.append(f"Default input: {default_input['name']}")
             devices = sd.query_devices()
@@ -233,8 +272,8 @@ def check_audio_devices() -> str:
                 lines.append(
                     f"  - {d['name']} ({d['max_input_channels']}ch, {d['default_samplerate']:.0f}Hz)"
                 )
-        except ImportError:
-            lines.append("WARNING: sounddevice not installed. Run: pip install sounddevice")
+        except RuntimeError as e:
+            lines.append(f"ERROR: {e}")
         except Exception as e:
             lines.append(f"Error querying devices: {e}")
 
