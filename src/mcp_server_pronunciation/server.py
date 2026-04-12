@@ -1,4 +1,4 @@
-"""MCP server for pronunciation assessment."""
+"""MCP server for voice conversation with Claude + English language feedback."""
 
 from __future__ import annotations
 
@@ -7,31 +7,43 @@ import random
 import tempfile
 import threading
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from mcp.server.fastmcp import FastMCP
 
-from .assessor import PronunciationAssessor
-from .recorder import check_audio_devices, record_audio
 from .sentences import SENTENCES
+
+if TYPE_CHECKING:
+    from .assessor import PronunciationAssessor
 
 logger = logging.getLogger(__name__)
 
 mcp = FastMCP("pronunciation")
 
 _assessor: PronunciationAssessor | None = None
+_assessor_lock = threading.Lock()
 _last_recording: Path | None = None
 _last_reference: str | None = None
 
 
 def _get_assessor() -> PronunciationAssessor:
+    """Return the assessor singleton, creating it lazily on first call."""
     global _assessor
     if _assessor is None:
-        _assessor = PronunciationAssessor()
+        with _assessor_lock:
+            if _assessor is None:
+                from .assessor import PronunciationAssessor
+
+                _assessor = PronunciationAssessor()
     return _assessor
 
 
 def _preload_model() -> None:
-    """Pre-load Whisper model in background so first practice call is fast."""
+    """Load Whisper weights in a daemon thread so the first tool call is fast.
+
+    The main thread finishes module import immediately, so the MCP initialize
+    handshake is never blocked by model loading.
+    """
 
     def _load():
         try:
@@ -41,11 +53,10 @@ def _preload_model() -> None:
         except Exception as e:
             logger.warning("Failed to pre-load Whisper model: %s", e)
 
-    thread = threading.Thread(target=_load, daemon=True)
+    thread = threading.Thread(target=_load, daemon=True, name="whisper-preload")
     thread.start()
 
 
-# Start pre-loading as soon as the module is imported
 _preload_model()
 
 
@@ -56,61 +67,58 @@ def _new_recording_path() -> Path:
     return path
 
 
-@mcp.tool()
-def record(duration: float = 10.0) -> str:
-    """
-    Record audio from the microphone.
+# ---------------------------------------------------------------------------
+# Primary tool — voice conversation with English feedback
+# ---------------------------------------------------------------------------
 
-    Recording auto-stops when you finish speaking (after detecting silence).
-    The duration is the maximum time — you don't have to wait the full duration.
+
+@mcp.tool()
+def converse(target_hint: str | None = None, duration: float = 30.0) -> str:
+    """
+    Record the user speaking, transcribe it, and return the transcript plus quick
+    English feedback. This is the primary tool for voice conversations: call it,
+    read the transcript + feedback, then respond conversationally in your own
+    words — weaving the feedback in naturally or mentioning it only if it matters.
+
+    Recording auto-stops when the user finishes speaking (silence detection).
+
+    Use this tool when:
+    - The user wants to chat with you by voice instead of typing
+    - The user wants casual English feedback while talking with you
+    - You want to hear what the user said rather than read a typed message
+
+    For a focused drill where the user reads a specific sentence, use `practice`
+    instead.
 
     Args:
-        duration: Maximum recording duration in seconds (default 10, max 120).
+        target_hint: Optional. Only set this if the user is explicitly trying
+            to say a specific sentence (e.g. they asked "how do I say X?" and
+            you told them X). Leave blank for free-form conversation.
+        duration: Maximum recording duration in seconds (default 30, max 120).
+            Auto-stops earlier on silence.
 
     Returns:
-        Path to the recorded WAV file.
+        Markdown report containing the user's transcript, brief English feedback
+        (pronunciation + grammar + fluency), and a 'For Claude' section with
+        guidance on how to respond.
     """
-    global _last_recording
+    global _last_recording, _last_reference
+    from .recorder import record_audio
+
     duration = min(max(duration, 1.0), 120.0)
     output_path = _new_recording_path()
-
     record_audio(duration, output_path)
     _last_recording = output_path
-
-    size_kb = output_path.stat().st_size / 1024
-    actual_sec = size_kb / (16000 * 2 / 1024)  # rough estimate from file size
-    return f"Recorded {actual_sec:.1f}s of audio to {output_path}"
-
-
-@mcp.tool()
-def assess(reference_text: str | None = None, audio_path: str | None = None) -> str:
-    """
-    Assess pronunciation of the last recording (or a specific audio file).
-
-    Transcribes the audio using Whisper and provides word-level pronunciation
-    feedback including clarity scores, fluency metrics, and language-specific tips.
-
-    Args:
-        reference_text: Expected text the speaker was trying to say (optional).
-            If provided, enables comparison-based feedback.
-        audio_path: Path to a WAV file. Uses the last recording if not specified.
-
-    Returns:
-        Detailed pronunciation assessment report.
-    """
-    if audio_path:
-        path = Path(audio_path)
-    elif _last_recording:
-        path = _last_recording
-    else:
-        return "Error: No recording found. Use the 'record' tool first."
-
-    if not path.exists():
-        return f"Error: Audio file not found: {path}"
+    _last_reference = target_hint
 
     assessor = _get_assessor()
-    result = assessor.assess(path, reference_text=reference_text)
-    return result.format_report()
+    result = assessor.assess(output_path, reference_text=target_hint)
+    return result.format_converse_report(has_target=target_hint is not None)
+
+
+# ---------------------------------------------------------------------------
+# Practice mode — focused pronunciation drills
+# ---------------------------------------------------------------------------
 
 
 @mcp.tool()
@@ -119,19 +127,24 @@ def practice(
     duration: float = 15.0,
 ) -> str:
     """
-    Full pronunciation practice: record and assess in one step.
+    Drill mode: the user reads a specific sentence aloud and gets a detailed
+    pronunciation assessment. Use this when the user explicitly wants to
+    practice reading a particular sentence, not for free-form chat.
 
-    Recording auto-stops when you finish speaking. Read the sentence aloud,
-    then wait briefly — the recording will stop automatically.
+    For voice conversation with casual feedback, use `converse` instead.
+
+    Recording auto-stops when the user finishes speaking.
 
     Args:
-        reference_text: The sentence to practice reading aloud.
+        reference_text: The sentence the user will read aloud.
         duration: Maximum recording duration in seconds (default 15, max 120).
 
     Returns:
         Detailed pronunciation assessment report.
     """
     global _last_recording, _last_reference
+    from .recorder import record_audio
+
     duration = min(max(duration, 1.0), 120.0)
     output_path = _new_recording_path()
 
@@ -147,19 +160,20 @@ def practice(
 @mcp.tool()
 def retry(duration: float = 15.0) -> str:
     """
-    Retry the last practiced sentence.
+    Retry the last sentence the user was practicing.
 
-    Re-records and re-assesses using the same reference text from the
-    previous practice call. Use this to quickly try again after getting feedback.
+    Re-records and re-assesses using the same reference text from the previous
+    `practice` or `converse` call. Use this to let the user try again after
+    getting feedback.
 
     Args:
         duration: Maximum recording duration in seconds (default 15, max 120).
 
     Returns:
-        Detailed pronunciation assessment report.
+        Pronunciation assessment report for the new attempt.
     """
     if not _last_reference:
-        return "Error: No previous practice session. Use 'practice' first."
+        return "Error: No previous practice session. Use 'practice' or 'converse' first."
     return practice(_last_reference, duration)
 
 
@@ -170,10 +184,10 @@ def quick_practice(
     duration: float = 15.0,
 ) -> str:
     """
-    Pick a random sentence and start practicing immediately.
+    Pick a random practice sentence and drill it immediately.
 
-    Combines suggest_sentence + practice into one step: picks a sentence
-    matching your criteria, then records and assesses your pronunciation.
+    Combines `suggest_sentence` + `practice` into one step: picks a sentence
+    matching the criteria, then records and assesses.
 
     Args:
         focus: Phoneme focus area. Options: "th", "f_v", "r_l", "vowels", "general".
@@ -192,7 +206,11 @@ def quick_practice(
         pool = [s for s in pool if s["difficulty"] == difficulty]
 
     if not pool:
-        return "No sentences match that filter. Try: focus=th/f_v/r_l/vowels/general, difficulty=beginner/intermediate/advanced"
+        return (
+            "No sentences match that filter. "
+            "Try: focus=th/f_v/r_l/vowels/general, "
+            "difficulty=beginner/intermediate/advanced"
+        )
 
     sentence = random.choice(pool)
     text = sentence["text"]
@@ -213,7 +231,7 @@ def suggest_sentence(
     difficulty: str | None = None,
 ) -> str:
     """
-    Suggest a practice sentence for pronunciation practice.
+    Suggest a practice sentence the user can read aloud.
 
     Args:
         focus: Phoneme focus area. Options: "th", "f_v", "r_l", "vowels", "general".
@@ -231,7 +249,11 @@ def suggest_sentence(
         pool = [s for s in pool if s["difficulty"] == difficulty]
 
     if not pool:
-        return "No sentences match that filter. Try: focus=th/f_v/r_l/vowels/general, difficulty=beginner/intermediate/advanced"
+        return (
+            "No sentences match that filter. "
+            "Try: focus=th/f_v/r_l/vowels/general, "
+            "difficulty=beginner/intermediate/advanced"
+        )
 
     sentence = random.choice(pool)
     return (
@@ -242,14 +264,85 @@ def suggest_sentence(
     )
 
 
+# ---------------------------------------------------------------------------
+# Utility tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def record(duration: float = 10.0) -> str:
+    """
+    Record audio from the microphone without assessing it.
+
+    Recording auto-stops when the user finishes speaking (silence detection).
+    The duration is the maximum time — you don't have to wait the full duration.
+
+    Most of the time prefer `converse` or `practice`, which record AND analyze
+    in one step. Only use `record` alone if you want the raw WAV file.
+
+    Args:
+        duration: Maximum recording duration in seconds (default 10, max 120).
+
+    Returns:
+        Path to the recorded WAV file.
+    """
+    global _last_recording
+    from .recorder import record_audio
+
+    duration = min(max(duration, 1.0), 120.0)
+    output_path = _new_recording_path()
+
+    record_audio(duration, output_path)
+    _last_recording = output_path
+
+    size_kb = output_path.stat().st_size / 1024
+    actual_sec = size_kb / (16000 * 2 / 1024)
+    return f"Recorded {actual_sec:.1f}s of audio to {output_path}"
+
+
+@mcp.tool()
+def assess(reference_text: str | None = None, audio_path: str | None = None) -> str:
+    """
+    Assess the last recording (or a specific audio file) without re-recording.
+
+    Transcribes with Whisper and returns word-level pronunciation feedback.
+
+    Args:
+        reference_text: Expected text the user was trying to say (optional).
+            If provided, enables sentence-level comparison.
+        audio_path: Path to a WAV file. Uses the last recording if not specified.
+
+    Returns:
+        Detailed pronunciation assessment report.
+    """
+    if audio_path:
+        path = Path(audio_path)
+    elif _last_recording:
+        path = _last_recording
+    else:
+        return "Error: No recording found. Use the 'record' or 'converse' tool first."
+
+    if not path.exists():
+        return f"Error: Audio file not found: {path}"
+
+    assessor = _get_assessor()
+    result = assessor.assess(path, reference_text=reference_text)
+    return result.format_report()
+
+
 @mcp.tool()
 def check_mic() -> str:
     """
-    Check available audio input devices.
+    List available audio input devices and verify microphone access.
+
+    Use this if the user reports recording problems — it shows which devices
+    are available and which one is the default.
 
     Returns:
         List of available microphone devices.
     """
+    from .recorder import check_audio_devices
+
     return check_audio_devices()
 
 
