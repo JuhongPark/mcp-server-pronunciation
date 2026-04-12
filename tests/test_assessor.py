@@ -217,3 +217,80 @@ class TestKoreanTips:
         r = _make_result("five friends", words=words)
         tips = r._get_korean_tips()
         assert any("/f/" in t for t in tips)
+
+
+# --- Grammar notes (irregular past tense) ---
+
+
+class TestGrammarNotes:
+    def test_detects_buyed(self):
+        r = _make_result("I buyed some apples yesterday")
+        notes = r.grammar_notes()
+        assert len(notes) == 1
+        wrong, correct, _ = notes[0]
+        assert wrong == "buyed"
+        assert correct == "bought"
+
+    def test_multiple_errors(self):
+        r = _make_result("I goed home and eated dinner")
+        notes = r.grammar_notes()
+        wrongs = {n[0] for n in notes}
+        assert wrongs == {"goed", "eated"}
+
+    def test_case_insensitive(self):
+        r = _make_result("Yesterday I BUYED apples")
+        notes = r.grammar_notes()
+        assert len(notes) == 1
+        assert notes[0][0] == "buyed"
+
+    def test_no_errors(self):
+        r = _make_result("I bought apples yesterday")
+        assert r.grammar_notes() == []
+
+    def test_empty_transcript(self):
+        r = _make_result("")
+        r.words = []
+        assert r.grammar_notes() == []
+
+    def test_deduplicates(self):
+        r = _make_result("I buyed the apple and then I buyed another one")
+        notes = r.grammar_notes()
+        assert len(notes) == 1
+
+
+# --- Converse report format ---
+
+
+class TestFormatConverseReport:
+    def test_has_user_said_section(self):
+        r = _make_result("hello how are you")
+        report = r.format_converse_report()
+        assert "## User said" in report
+        assert "hello how are you" in report
+
+    def test_has_for_claude_section(self):
+        r = _make_result("hello")
+        report = r.format_converse_report()
+        assert "## For Claude" in report
+
+    def test_surfaces_grammar_error(self):
+        r = _make_result("I buyed apples")
+        report = r.format_converse_report()
+        assert "Grammar" in report
+        assert "bought" in report
+
+    def test_empty_transcript_tells_claude_to_ask_again(self):
+        r = _make_result("")
+        r.words = []
+        report = r.format_converse_report()
+        assert "silent" in report.lower() or "repeat" in report.lower()
+
+    def test_no_errors_clean_report(self):
+        r = _make_result("I am having a great day today")
+        report = r.format_converse_report()
+        assert "Quick feedback" in report
+
+    def test_target_mode_shows_mismatch(self):
+        r = _make_result("de tree brothers", reference="The three brothers")
+        report = r.format_converse_report(has_target=True)
+        assert "Pronunciation" in report

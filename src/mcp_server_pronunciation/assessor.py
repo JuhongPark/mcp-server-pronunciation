@@ -8,8 +8,10 @@ import re
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from faster_whisper import WhisperModel
+if TYPE_CHECKING:
+    from faster_whisper import WhisperModel
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +95,39 @@ _RL_WORDS = {
 }
 
 
+# Common ESL grammar mistakes — rule-based, no external deps.
+# Covers irregular verb past tenses most Korean learners over-regularize.
+_IRREGULAR_PAST_ERRORS: dict[str, tuple[str, str]] = {
+    "buyed": ("bought", "Past tense of 'buy' is 'bought' (irregular)"),
+    "goed": ("went", "Past tense of 'go' is 'went' (irregular)"),
+    "runned": ("ran", "Past tense of 'run' is 'ran' (irregular)"),
+    "seed": ("saw", "Past tense of 'see' is 'saw' (irregular)"),
+    "eated": ("ate", "Past tense of 'eat' is 'ate' (irregular)"),
+    "drinked": ("drank", "Past tense of 'drink' is 'drank' (irregular)"),
+    "taked": ("took", "Past tense of 'take' is 'took' (irregular)"),
+    "writed": ("wrote", "Past tense of 'write' is 'wrote' (irregular)"),
+    "sleeped": ("slept", "Past tense of 'sleep' is 'slept' (irregular)"),
+    "teached": ("taught", "Past tense of 'teach' is 'taught' (irregular)"),
+    "catched": ("caught", "Past tense of 'catch' is 'caught' (irregular)"),
+    "bringed": ("brought", "Past tense of 'bring' is 'brought' (irregular)"),
+    "breaked": ("broke", "Past tense of 'break' is 'broke' (irregular)"),
+    "thinked": ("thought", "Past tense of 'think' is 'thought' (irregular)"),
+    "feeled": ("felt", "Past tense of 'feel' is 'felt' (irregular)"),
+    "maked": ("made", "Past tense of 'make' is 'made' (irregular)"),
+    "gived": ("gave", "Past tense of 'give' is 'gave' (irregular)"),
+    "knowed": ("knew", "Past tense of 'know' is 'knew' (irregular)"),
+    "finded": ("found", "Past tense of 'find' is 'found' (irregular)"),
+    "standed": ("stood", "Past tense of 'stand' is 'stood' (irregular)"),
+    "holded": ("held", "Past tense of 'hold' is 'held' (irregular)"),
+    "leaved": ("left", "Past tense of 'leave' is 'left' (irregular)"),
+    "readed": ("read", "Past tense of 'read' is 'read' (spelled the same, pronounced /red/)"),
+    "swimmed": ("swam", "Past tense of 'swim' is 'swam' (irregular)"),
+    "speaked": ("spoke", "Past tense of 'speak' is 'spoke' (irregular)"),
+    "beginned": ("began", "Past tense of 'begin' is 'began' (irregular)"),
+    "choosed": ("chose", "Past tense of 'choose' is 'chose' (irregular)"),
+}
+
+
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
@@ -149,6 +184,17 @@ class AssessmentResult:
             if gap >= threshold:
                 pauses.append((self.words[i - 1].end, self.words[i].start, gap))
         return pauses
+
+    def grammar_notes(self) -> list[tuple[str, str, str]]:
+        """Return (wrong_word, correction, explanation) for grammar errors in transcript."""
+        notes = []
+        seen: set[str] = set()
+        for token in _normalize_words(self.transcript):
+            if token in _IRREGULAR_PAST_ERRORS and token not in seen:
+                seen.add(token)
+                correct, explanation = _IRREGULAR_PAST_ERRORS[token]
+                notes.append((token, correct, explanation))
+        return notes
 
     def format_report(self) -> str:
         """Format a concise, actionable pronunciation report."""
@@ -220,6 +266,111 @@ class AssessmentResult:
 
         if not mismatches and not low_conf and not tips:
             lines.append("### Great job! No major issues detected.\n")
+
+        return "\n".join(lines)
+
+    def format_converse_report(self, has_target: bool = False) -> str:
+        """Format a conversation-oriented report.
+
+        Unlike `format_report`, this is optimized for Claude to read and decide how
+        to respond: user's transcript up top, compact feedback bullets, and a
+        'For Claude' section telling the model how to weave the feedback into
+        a natural conversational reply.
+        """
+        lines = []
+        lines.append("## User said\n")
+        if self.transcript:
+            lines.append(f"> {self.transcript}\n")
+        else:
+            lines.append("> *(nothing clearly transcribed — may have been silent or too quiet)*\n")
+
+        confidence_pct = self.avg_confidence * 100
+        wpm = self.words_per_minute
+        speed_label = _speed_label(wpm)
+        lines.append(
+            f"**Clarity:** {confidence_pct:.0f}% &nbsp;|&nbsp; "
+            f"**Pace:** {wpm:.0f} WPM ({speed_label})\n"
+        )
+
+        feedback_bullets: list[str] = []
+
+        # Grammar errors first — they're actionable and easy for Claude to weave in.
+        grammar = self.grammar_notes()
+        for wrong, correct, explanation in grammar:
+            feedback_bullets.append(f'**Grammar:** *"{wrong}"* → *"{correct}"* — {explanation}')
+
+        # Target comparison (only when user is explicitly practicing a sentence).
+        if has_target and self.reference_text:
+            mismatches = self._find_mismatches()
+            shown = 0
+            for ref_word, heard_word, hint in mismatches:
+                if heard_word == "(extra)" or shown >= 3:
+                    continue
+                if heard_word == "(skipped)":
+                    feedback_bullets.append(
+                        f'**Pronunciation:** *"{ref_word}"* was skipped or too quiet'
+                    )
+                else:
+                    bullet = f'**Pronunciation:** *"{ref_word}"* → heard *"{heard_word}"*'
+                    if hint:
+                        bullet += f" — {hint}"
+                    feedback_bullets.append(bullet)
+                shown += 1
+
+        # Unclear words (independent of target comparison).
+        low_conf = self.low_confidence_words[:3]
+        already_flagged = {b.lower() for b in feedback_bullets}
+        for w in low_conf:
+            wlabel = w.word.strip().lower()
+            if any(wlabel in b for b in already_flagged):
+                continue
+            feedback_bullets.append(
+                f'**Pronunciation:** *"{w.word}"* was unclear ({w.probability:.0%} confidence)'
+            )
+
+        # Long pauses / fluency
+        pauses = self.get_pauses(1.2)
+        if len(pauses) >= 2:
+            feedback_bullets.append(
+                f"**Fluency:** {len(pauses)} long pauses — try to keep the flow"
+            )
+        elif wpm and wpm < 90 and len(self.words) >= 5:
+            feedback_bullets.append(
+                "**Fluency:** speaking quite slowly — natural pace is 120–150 WPM"
+            )
+
+        if feedback_bullets:
+            lines.append("## Quick feedback\n")
+            for b in feedback_bullets[:5]:
+                lines.append(f"- {b}")
+            lines.append("")
+        else:
+            lines.append("## Quick feedback\n")
+            lines.append("- No obvious issues — clear and natural.\n")
+
+        # Guidance for Claude on how to use this.
+        lines.append("## For Claude\n")
+        if not self.transcript:
+            lines.append(
+                "The user's recording was silent or very quiet. Ask them to repeat, "
+                "and consider suggesting they run `check_mic` if this happens twice."
+            )
+        elif feedback_bullets:
+            lines.append(
+                "Respond conversationally to what the user actually said (above). "
+                "You MAY weave the feedback in naturally — for example, subtly using "
+                "the corrected form in your own reply, or mentioning a fix explicitly "
+                "if the user asked for corrections. If the user is just chatting "
+                "casually, prioritize the conversation over the feedback; only call "
+                "out the most important item if any. Do not recite the whole feedback "
+                "list back at them."
+            )
+        else:
+            lines.append(
+                "Respond conversationally to what the user said. No feedback issues "
+                "to surface — just continue the chat naturally."
+            )
+        lines.append("")
 
         return "\n".join(lines)
 
@@ -300,12 +451,25 @@ def _normalize_words(text: str) -> list[str]:
     return text.split()
 
 
+def _speed_label(wpm: float) -> str:
+    if wpm <= 0:
+        return "n/a"
+    if wpm < 90:
+        return "slow"
+    if wpm < 120:
+        return "careful"
+    if wpm <= 160:
+        return "natural"
+    return "fast"
+
+
 # ---------------------------------------------------------------------------
 # Whisper engine
 # ---------------------------------------------------------------------------
 
-# Default model — can be overridden via MCP_PRONUNCIATION_MODEL env var
-DEFAULT_MODEL = os.environ.get("MCP_PRONUNCIATION_MODEL", "base")
+# Default model — English-only variant for better pronunciation accuracy at
+# small size. Override with MCP_PRONUNCIATION_MODEL env var.
+DEFAULT_MODEL = os.environ.get("MCP_PRONUNCIATION_MODEL", "base.en")
 
 
 def _detect_device() -> tuple[str, str]:
@@ -331,6 +495,8 @@ class PronunciationAssessor:
 
     def _get_model(self) -> WhisperModel:
         if self._model is None:
+            from faster_whisper import WhisperModel
+
             logger.info(
                 "Loading Whisper model '%s' on %s (%s)...",
                 self._model_size,
