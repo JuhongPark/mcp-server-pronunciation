@@ -305,15 +305,29 @@ def assess(reference_text: str | None = None, audio_path: str | None = None) -> 
     """
     Assess the last recording (or a specific audio file) without re-recording.
 
-    Transcribes with Whisper and returns word-level pronunciation feedback.
+    When `reference_text` is provided, the assessor:
+      - Aligns the user's speech to the reference word-by-word (Needleman-Wunsch;
+        single deletions/insertions no longer cascade into phantom substitutions).
+      - Runs wav2vec2 CTC forced alignment to verify which reference words the
+        user actually produced — mitigates Whisper-bias mistranscriptions on
+        rare proper nouns and domain terms by checking acoustic evidence
+        against the reference directly.
+      - Surfaces per-word phoneme-level feedback (expected vs produced IPA,
+        weak phonemes) from CMUdict.
+      - Detects common Korean-L1 pronunciation patterns (r/l, th→s, final
+        cluster deletion, intrusive onset vowel, etc.) with Korean-language
+        tips and minimal-pair drills.
+      - Adds prosody notes: word-stress placement, sentence-final rising
+        intonation on declaratives, intra-clause hesitation pauses.
+
+    Without a reference, only the transcript and prosody run.
 
     Args:
         reference_text: Expected text the user was trying to say (optional).
-            If provided, enables sentence-level comparison.
         audio_path: Path to a WAV file. Uses the last recording if not specified.
 
     Returns:
-        Detailed pronunciation assessment report.
+        Detailed pronunciation assessment report (markdown).
     """
     if audio_path:
         path = Path(audio_path)

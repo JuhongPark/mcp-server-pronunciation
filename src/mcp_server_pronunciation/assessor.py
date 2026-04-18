@@ -1,4 +1,20 @@
-"""Pronunciation assessment using faster-whisper word-level analysis."""
+"""Pronunciation assessment: Whisper ASR + word alignment + phoneme diff + prosody.
+
+Pipeline:
+  audio + optional reference_text
+    -> Whisper (biased by reference via `initial_prompt` when provided)
+    -> word-level hypothesis tokens + per-word Whisper probability
+    -> Needleman-Wunsch alignment vs reference tokens
+    -> per-mismatched-word phoneme-sequence diff (CMUdict + g2p_en)
+    -> Korean-L1 pattern scan over alignment + phoneme diffs
+    -> librosa-based prosody (word stress / final-rise / intra-clause pauses)
+    -> Drill suggestions
+    -> AssessmentResult (dict JSON + markdown renderer)
+
+When no reference_text is provided, only the transcript and prosody run — the
+phoneme + alignment + pattern stages require a reference. This keeps the
+`converse` voice-chat flow working.
+"""
 
 from __future__ import annotations
 
@@ -6,97 +22,32 @@ import logging
 import os
 import re
 from dataclasses import dataclass, field
-from difflib import SequenceMatcher
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from .alignment import AlignedWord, align_words, tokenize
+from .phonemes import (
+    Drill,
+    KoreanL1Pattern,
+    PhonemeDiff,
+    detect_patterns,
+    diff_word,
+    suggest_drills,
+)
+from .prosody import ProsodyResult, TimedWord, analyze as prosody_analyze
+from . import forced_align
 
 if TYPE_CHECKING:
     from faster_whisper import WhisperModel
 
 logger = logging.getLogger(__name__)
 
+
 # ---------------------------------------------------------------------------
-# Korean-speaker pronunciation tips
+# Grammar rule table — unchanged from v0.2; Korean learners over-regularize
+# irregular past tenses. Still useful in the converse flow.
 # ---------------------------------------------------------------------------
 
-SUBSTITUTION_HINTS: dict[tuple[str, str], str] = {
-    # th-sounds: Korean has no /θ/ or /ð/
-    ("three", "tree"): "/θr/ cluster — tongue between teeth before the /r/",
-    ("think", "sink"): "/θ/ at word start — tongue between teeth",
-    ("think", "tink"): "/θ/ at word start — tongue between teeth, not /t/",
-    ("this", "dis"): "/ð/ at word start — voiced, tongue between teeth",
-    ("the", "de"): "/ð/ — tongue between teeth with voice",
-    ("that", "dat"): "/ð/ — tongue between teeth with voice",
-    ("with", "wis"): "Final /θ/ — end with tongue between teeth",
-    ("with", "wit"): "Final /θ/ — tongue between teeth, not /t/",
-    ("bath", "bas"): "Final /θ/ — tongue between teeth at the end",
-    ("both", "bos"): "Final /θ/ — tongue between teeth at the end",
-    ("thought", "taught"): "/θ/ — tongue between teeth, not /t/",
-    ("through", "true"): "/θr/ — tongue between teeth before /r/",
-    ("thoroughly", "truly"): "/θ/ at word start — tongue between teeth",
-    # f/v confusion: Korean has no /f/ or /v/
-    ("five", "pive"): "Initial /f/ — lower lip touches upper teeth",
-    ("for", "por"): "Initial /f/ — lower lip touches upper teeth, not both lips",
-    ("future", "puture"): "Initial /f/ — lower lip touches upper teeth",
-    ("very", "berry"): "/v/ — lower lip touches upper teeth, voiced",
-    ("have", "hab"): "Final /v/ — lower lip touches upper teeth",
-    # r/l confusion
-    ("rice", "lice"): "/r/ at word start — tongue curled back, not touching ridge",
-    ("right", "light"): "/r/ at word start — tongue curled back",
-    ("light", "right"): "/l/ at word start — tongue tip firmly on alveolar ridge",
-    ("read", "lead"): "/r/ — tongue curled back, doesn't touch anything",
-    ("world", "word"): "/rl/ cluster — maintain the /l/ sound",
-    ("girl", "gir"): "Final /rl/ — tongue touches ridge for /l/ after /r/",
-}
-
-# Words that reveal common Korean pronunciation patterns
-_TH_WORDS = {
-    "the",
-    "this",
-    "that",
-    "think",
-    "three",
-    "through",
-    "with",
-    "math",
-    "both",
-    "bath",
-    "thought",
-    "thoroughly",
-    "brother",
-}
-_F_WORDS = {
-    "five",
-    "four",
-    "first",
-    "feel",
-    "fine",
-    "for",
-    "from",
-    "free",
-    "off",
-    "if",
-    "future",
-    "before",
-}
-_V_WORDS = {"very", "have", "over", "every", "never", "give", "live", "value"}
-_RL_WORDS = {
-    "right",
-    "light",
-    "read",
-    "lead",
-    "rice",
-    "lice",
-    "really",
-    "world",
-    "girl",
-    "long",
-    "wrong",
-}
-
-
-# Common ESL grammar mistakes — rule-based, no external deps.
-# Covers irregular verb past tenses most Korean learners over-regularize.
 _IRREGULAR_PAST_ERRORS: dict[str, tuple[str, str]] = {
     "buyed": ("bought", "Past tense of 'buy' is 'bought' (irregular)"),
     "goed": ("went", "Past tense of 'go' is 'went' (irregular)"),
@@ -135,26 +86,37 @@ _IRREGULAR_PAST_ERRORS: dict[str, tuple[str, str]] = {
 
 @dataclass
 class WordResult:
-    """Assessment result for a single word."""
+    """Per-word Whisper output. Kept so prosody + UI can look up timestamps."""
 
     word: str
     start: float
     end: float
     probability: float
-    issue: str | None = None
 
 
 @dataclass
 class AssessmentResult:
-    """Full pronunciation assessment result."""
+    """Full assessment — serializable to the JSON shape documented in README."""
 
     transcript: str
     reference_text: str | None
     words: list[WordResult] = field(default_factory=list)
-    duration_sec: float = 0.0
-    speech_duration_sec: float = 0.0
+    duration_sec: float = 0.0             # total audio duration (incl. silence)
+    speech_duration_sec: float = 0.0      # sum of word spans (speech only)
     language: str = "en"
     language_prob: float = 0.0
+
+    aligned: list[AlignedWord] = field(default_factory=list)
+    phoneme_diffs: list[PhonemeDiff] = field(default_factory=list)
+    korean_l1_patterns: list[KoreanL1Pattern] = field(default_factory=list)
+    prosody: ProsodyResult = field(default_factory=ProsodyResult)
+    drills: list[Drill] = field(default_factory=list)
+
+    # True when wav2vec2 forced alignment was available and used to verify
+    # which reference words the user actually produced (fixes Whisper bias).
+    forced_alignment_used: bool = False
+
+    # ---- derived scalars ------------------------------------------
 
     @property
     def words_per_minute(self) -> float:
@@ -163,21 +125,56 @@ class AssessmentResult:
         return len(self.words) / self.speech_duration_sec * 60
 
     @property
+    def wpm_caveat(self) -> str | None:
+        """Return a short caveat string when WPM is computed over too little speech."""
+        if self.speech_duration_sec <= 0:
+            return None
+        if self.speech_duration_sec < 10.0:
+            return f"computed over {self.speech_duration_sec:.1f}s of speech"
+        return None
+
+    @property
     def avg_confidence(self) -> float:
         if not self.words:
             return 0.0
         return sum(w.probability for w in self.words) / len(self.words)
 
     @property
-    def low_confidence_words(self) -> list[WordResult]:
-        return [w for w in self.words if w.probability < 0.7]
+    def clarity_pct(self) -> int:
+        """Clarity score on 0-100 scale.
 
-    @property
-    def flagged_words(self) -> list[WordResult]:
-        return [w for w in self.words if w.issue]
+        Combines Whisper's average per-word confidence (proxy for how
+        identifiable each word was) with a penalty for mismatches against
+        reference (if a reference was provided). Mismatches are weighted
+        equally to confidence so a well-pronounced wrong word doesn't score
+        higher than a nominally-recognized word that matches.
+        """
+        whisper_score = self.avg_confidence
+        if not self.reference_text:
+            return int(round(whisper_score * 100))
+
+        total = sum(1 for a in self.aligned if a.ref is not None)
+        if total == 0:
+            return int(round(whisper_score * 100))
+        matches = sum(1 for a in self.aligned if a.op == "match")
+        align_score = matches / total
+        return int(round(((whisper_score + align_score) / 2) * 100))
+
+    # ---- grammar (ported unchanged) ----------------------------------
+
+    def grammar_notes(self) -> list[tuple[str, str, str]]:
+        """Return (wrong_word, correction, explanation) for grammar errors."""
+        notes = []
+        seen: set[str] = set()
+        for token in tokenize(self.transcript):
+            if token in _IRREGULAR_PAST_ERRORS and token not in seen:
+                seen.add(token)
+                correct, explanation = _IRREGULAR_PAST_ERRORS[token]
+                notes.append((token, correct, explanation))
+        return notes
 
     def get_pauses(self, threshold: float = 0.8) -> list[tuple[float, float, float]]:
-        """Find pauses longer than threshold seconds between words."""
+        """Raw pauses longer than threshold seconds (used by converse report)."""
         pauses = []
         for i in range(1, len(self.words)):
             gap = self.words[i].start - self.words[i - 1].end
@@ -185,177 +182,289 @@ class AssessmentResult:
                 pauses.append((self.words[i - 1].end, self.words[i].start, gap))
         return pauses
 
-    def grammar_notes(self) -> list[tuple[str, str, str]]:
-        """Return (wrong_word, correction, explanation) for grammar errors in transcript."""
-        notes = []
-        seen: set[str] = set()
-        for token in _normalize_words(self.transcript):
-            if token in _IRREGULAR_PAST_ERRORS and token not in seen:
-                seen.add(token)
-                correct, explanation = _IRREGULAR_PAST_ERRORS[token]
-                notes.append((token, correct, explanation))
-        return notes
+    # ---- serialization ---------------------------------------------
+
+    def to_dict(self) -> dict:
+        """JSON-serializable dict matching the documented output shape."""
+        return {
+            "clarity_pct": self.clarity_pct,
+            "speaking_rate_wpm": int(round(self.words_per_minute)),
+            "wpm_caveat": self.wpm_caveat,
+            "transcript": self.transcript,
+            "reference_text": self.reference_text,
+            "alignment": [
+                {
+                    "ref": a.ref,
+                    "hyp": a.hyp,
+                    "op": a.op,
+                    **(
+                        {"forced_confidence": round(a.forced_confidence, 2)}
+                        if a.forced_confidence is not None
+                        else {}
+                    ),
+                    **({"note": a.note} if a.note else {}),
+                }
+                for a in self.aligned
+            ],
+            "forced_alignment_used": self.forced_alignment_used,
+            "phoneme_issues": [
+                {
+                    "word": d.word,
+                    "expected": d.expected_ipa,
+                    "produced": d.produced_ipa,
+                    "weak_phoneme": d.weak_phonemes_ipa,
+                    "confidence": round(d.confidence, 2),
+                }
+                for d in self.phoneme_diffs
+                # Skip fully-absent productions — those are already represented
+                # as "del" in the alignment; listing them here as weak_phoneme
+                # equal to the full word IPA is noise.
+                if d.weak_phonemes and d.produced_arpa
+            ],
+            "korean_l1_patterns": [
+                {
+                    "pattern": p.pattern,
+                    "label": p.label,
+                    "examples": p.examples,
+                    "count": p.count,
+                    "tip_ko": p.tip_ko,
+                    "drill": p.drill,
+                }
+                for p in self.korean_l1_patterns
+            ],
+            "prosody": {
+                "wrong_word_stress": [
+                    {
+                        "word": e.word,
+                        "expected_syllable": e.expected_stress_syllable,
+                        "observed_syllable": e.observed_stress_syllable,
+                    }
+                    for e in self.prosody.wrong_word_stress
+                ],
+                "final_rise_on_declarative": self.prosody.final_rise_on_declarative,
+                "intra_clause_pauses": [
+                    {
+                        "before": p.before,
+                        "after": p.after,
+                        "duration_sec": round(p.duration, 2),
+                        "at_sec": round(p.start, 2),
+                    }
+                    for p in self.prosody.intra_clause_pauses
+                ],
+                "unavailable": self.prosody.unavailable,
+            },
+            "drills": [
+                {"reason": d.reason, "minimal_pairs": d.minimal_pairs}
+                for d in self.drills
+            ],
+        }
+
+    # ---- markdown rendering ----------------------------------------
 
     def format_report(self) -> str:
-        """Format a concise, actionable pronunciation report."""
-        lines = []
+        """Markdown report for `practice` / `assess`.
+
+        Replaces the old "X heard as Y" list with:
+          - alignment table (match/sub/ins/del)
+          - phoneme issues (expected vs produced IPA, weak phoneme)
+          - Korean-L1 patterns with tips + drills
+          - prosody findings
+        """
+        lines: list[str] = []
         lines.append("## Pronunciation Assessment\n")
 
-        # What you said vs reference
         lines.append(f"**You said:** {self.transcript or '(nothing detected)'}")
         if self.reference_text:
             lines.append(f"**Target:** {self.reference_text}")
         lines.append("")
 
-        # Compact summary line
-        confidence_pct = self.avg_confidence * 100
         wpm = self.words_per_minute
         lines.append(
-            f"**Clarity:** {confidence_pct:.0f}% | **Speed:** {wpm:.0f} WPM | ",
+            f"**Clarity:** {self.clarity_pct}% | "
+            f"**Speed:** {wpm:.0f} WPM ({_speed_label(wpm)})"
         )
-
-        if wpm < 100:
-            lines[-1] += "Slow — try speaking a bit faster"
-        elif wpm < 130:
-            lines[-1] += "Careful pace — good for practice"
-        elif wpm <= 170:
-            lines[-1] += "Natural pace"
-        else:
-            lines[-1] += "Fast — watch clarity"
+        if self.wpm_caveat:
+            lines.append(f"*Note: WPM {self.wpm_caveat}.*")
         lines.append("")
 
-        # Mismatches — the most important section
-        mismatches = self._find_mismatches() if self.reference_text else []
-        if mismatches:
-            lines.append("### What to fix")
-            for ref_word, heard_word, hint in mismatches:
-                if heard_word == "(skipped)":
-                    lines.append(f'- **"{ref_word}"** — skipped or too quiet')
-                elif heard_word == "(extra)":
-                    pass  # Don't show extra words as errors
+        # Alignment — only show when there are real mismatches or FA notes.
+        if self.aligned and self.reference_text:
+            non_match = [a for a in self.aligned if a.op != "match" or a.note]
+            if non_match:
+                lines.append("### Alignment")
+                if self.forced_alignment_used:
+                    lines.append("| Reference | You said |  | Conf |")
+                    lines.append("|---|---|---|---|")
                 else:
-                    lines.append(f'- **"{ref_word}"** → heard **"{heard_word}"**')
-                    if hint:
-                        lines.append(f"  - {hint}")
+                    lines.append("| Reference | You said |  |")
+                    lines.append("|---|---|---|")
+                for a in self.aligned:
+                    ref = a.ref or "—"
+                    hyp = a.hyp or "—"
+                    marker = {
+                        "match": "✓",
+                        "sub":  "≠",
+                        "ins":  "+",
+                        "del":  "−",
+                    }[a.op]
+                    conf_cell = ""
+                    if self.forced_alignment_used:
+                        c = a.forced_confidence
+                        conf_cell = f" {c:.0%} |" if c is not None else " — |"
+                    row = f"| {ref} | {hyp} | {marker} {a.op} |{conf_cell}"
+                    lines.append(row)
+                    if a.note:
+                        lines.append(f"|  |  | *{a.note}* |"
+                                     + (" |" if self.forced_alignment_used else ""))
+                lines.append("")
+
+        # Phoneme issues (skip fully-deleted words — already shown in alignment).
+        phoneme_hits = [
+            d for d in self.phoneme_diffs if d.weak_phonemes and d.produced_arpa
+        ]
+        if phoneme_hits:
+            lines.append("### Phoneme issues")
+            for d in phoneme_hits:
+                lines.append(
+                    f"- **{d.word}** — expected {d.expected_ipa}, "
+                    f"produced {d.produced_ipa} — weak: **{d.weak_phonemes_ipa}** "
+                    f"({int(d.confidence * 100)}% phoneme match)"
+                )
             lines.append("")
 
-        # Low confidence words (only those not already in mismatches)
-        mismatch_words = {m[0] for m in mismatches}
-        low_conf = [w for w in self.low_confidence_words if w.word.lower() not in mismatch_words]
-        if low_conf:
-            lines.append("### Unclear words")
-            for w in low_conf:
-                lines.append(f'- **"{w.word}"** ({w.probability:.0%} confidence)')
+        # Korean-L1 patterns.
+        if self.korean_l1_patterns:
+            lines.append("### Korean-speaker patterns")
+            for p in self.korean_l1_patterns:
+                examples = ", ".join(p.examples[:3])
+                lines.append(f"- **{p.label}** ({p.count}× — {examples})")
+                lines.append(f"  - Tip: {p.tip_ko}")
+                lines.append(f"  - Drill: {' · '.join(p.drill[:4])}")
             lines.append("")
 
-        # Pauses
-        pauses = self.get_pauses(0.8)
-        if pauses:
-            lines.append("### Pauses")
-            for start, end, dur in pauses[:3]:
-                lines.append(f"- {dur:.1f}s pause at {start:.1f}s")
+        # Prosody.
+        prosody_lines: list[str] = []
+        if self.prosody.final_rise_on_declarative:
+            prosody_lines.append(
+                "- Sentence ended with rising intonation. Declaratives should fall."
+            )
+        if self.prosody.wrong_word_stress:
+            words_fmt = ", ".join(
+                f"{e.word} (syl {e.observed_stress_syllable + 1} instead of {e.expected_stress_syllable + 1})"
+                for e in self.prosody.wrong_word_stress[:3]
+            )
+            prosody_lines.append(f"- Misplaced word stress: {words_fmt}")
+        if self.prosody.intra_clause_pauses:
+            pfmt = ", ".join(
+                f"{p.duration:.2f}s between '{p.before}' and '{p.after}'"
+                for p in self.prosody.intra_clause_pauses[:3]
+            )
+            prosody_lines.append(f"- Hesitation mid-clause: {pfmt}")
+        if prosody_lines:
+            lines.append("### Prosody")
+            lines.extend(prosody_lines)
             lines.append("")
 
-        # Korean-speaker tips
-        tips = self._get_korean_tips()
-        if tips:
-            lines.append("### Tips for Korean speakers")
-            for tip in tips:
-                lines.append(f"- {tip}")
+        # Drills.
+        if self.drills:
+            lines.append("### Drill these")
+            for d in self.drills:
+                pairs = ", ".join(d.minimal_pairs[:4])
+                lines.append(f"- **{d.reason}**: {pairs}")
             lines.append("")
 
-        if not mismatches and not low_conf and not tips:
+        # Grammar (still useful for any path).
+        grammar = self.grammar_notes()
+        if grammar:
+            lines.append("### Grammar")
+            for wrong, correct, _explain in grammar:
+                lines.append(f'- *"{wrong}"* → *"{correct}"*')
+            lines.append("")
+
+        # Clean report if nothing surfaced.
+        if (
+            not phoneme_hits
+            and not self.korean_l1_patterns
+            and not prosody_lines
+            and not grammar
+            and (not self.aligned or all(a.op == "match" for a in self.aligned))
+        ):
             lines.append("### Great job! No major issues detected.\n")
 
         return "\n".join(lines)
 
     def format_converse_report(self, has_target: bool = False) -> str:
-        """Format a conversation-oriented report.
+        """Conversational flavor of the report for the `converse` tool.
 
-        Unlike `format_report`, this is optimized for Claude to read and decide how
-        to respond: user's transcript up top, compact feedback bullets, and a
-        'For Claude' section telling the model how to weave the feedback into
-        a natural conversational reply.
+        Drops the alignment table and drill list; keeps a couple of
+        high-signal bullets and the "For Claude" guidance block.
         """
-        lines = []
+        lines: list[str] = []
         lines.append("## User said\n")
         if self.transcript:
             lines.append(f"> {self.transcript}\n")
         else:
             lines.append("> *(nothing clearly transcribed — may have been silent or too quiet)*\n")
 
-        confidence_pct = self.avg_confidence * 100
         wpm = self.words_per_minute
-        speed_label = _speed_label(wpm)
         lines.append(
-            f"**Clarity:** {confidence_pct:.0f}% &nbsp;|&nbsp; "
-            f"**Pace:** {wpm:.0f} WPM ({speed_label})\n"
+            f"**Clarity:** {self.clarity_pct}% &nbsp;|&nbsp; "
+            f"**Pace:** {wpm:.0f} WPM ({_speed_label(wpm)})\n"
         )
 
-        feedback_bullets: list[str] = []
+        feedback: list[str] = []
 
-        # Grammar errors first — they're actionable and easy for Claude to weave in.
-        grammar = self.grammar_notes()
-        for wrong, correct, explanation in grammar:
-            feedback_bullets.append(f'**Grammar:** *"{wrong}"* → *"{correct}"* — {explanation}')
+        for wrong, correct, explanation in self.grammar_notes():
+            feedback.append(f'**Grammar:** *"{wrong}"* → *"{correct}"* — {explanation}')
 
-        # Target comparison (only when user is explicitly practicing a sentence).
-        if has_target and self.reference_text:
-            mismatches = self._find_mismatches()
-            shown = 0
-            for ref_word, heard_word, hint in mismatches:
-                if heard_word == "(extra)" or shown >= 3:
-                    continue
-                if heard_word == "(skipped)":
-                    feedback_bullets.append(
-                        f'**Pronunciation:** *"{ref_word}"* was skipped or too quiet'
-                    )
-                else:
-                    bullet = f'**Pronunciation:** *"{ref_word}"* → heard *"{heard_word}"*'
-                    if hint:
-                        bullet += f" — {hint}"
-                    feedback_bullets.append(bullet)
-                shown += 1
+        if has_target and self.reference_text and self.aligned:
+            subs = [a for a in self.aligned if a.op == "sub"][:2]
+            dels = [a for a in self.aligned if a.op == "del"][:1]
+            for a in subs:
+                feedback.append(
+                    f'**Pronunciation:** *"{a.ref}"* → heard *"{a.hyp}"*'
+                )
+            for a in dels:
+                feedback.append(f'**Pronunciation:** *"{a.ref}"* was skipped')
 
-        # Unclear words (independent of target comparison).
-        low_conf = self.low_confidence_words[:3]
-        already_flagged = {b.lower() for b in feedback_bullets}
-        for w in low_conf:
-            wlabel = w.word.strip().lower()
-            if any(wlabel in b for b in already_flagged):
-                continue
-            feedback_bullets.append(
-                f'**Pronunciation:** *"{w.word}"* was unclear ({w.probability:.0%} confidence)'
+        # Surface top phoneme issue (single bullet, keep the report short).
+        phoneme_hits = [d for d in self.phoneme_diffs if d.weak_phonemes]
+        if phoneme_hits and len(feedback) < 4:
+            d = phoneme_hits[0]
+            feedback.append(
+                f'**Phoneme:** *"{d.word}"* — weak {d.weak_phonemes_ipa} '
+                f"(expected {d.expected_ipa})"
             )
 
-        # Long pauses / fluency
-        pauses = self.get_pauses(1.2)
-        if len(pauses) >= 2:
-            feedback_bullets.append(
-                f"**Fluency:** {len(pauses)} long pauses — try to keep the flow"
-            )
-        elif wpm and wpm < 90 and len(self.words) >= 5:
-            feedback_bullets.append(
-                "**Fluency:** speaking quite slowly — natural pace is 120–150 WPM"
-            )
+        # Top Korean-L1 pattern (single bullet).
+        if self.korean_l1_patterns and len(feedback) < 5:
+            p = self.korean_l1_patterns[0]
+            feedback.append(f"**{p.label}**: {p.tip_ko}")
 
-        if feedback_bullets:
+        if self.prosody.final_rise_on_declarative:
+            feedback.append("**Intonation:** statement ended with rising pitch (sounded like a question)")
+
+        if self.get_pauses(1.2):
+            count = len(self.get_pauses(1.2))
+            if count >= 2:
+                feedback.append(f"**Fluency:** {count} long pauses — try to keep the flow")
+
+        if feedback:
             lines.append("## Quick feedback\n")
-            for b in feedback_bullets[:5]:
+            for b in feedback[:5]:
                 lines.append(f"- {b}")
             lines.append("")
         else:
             lines.append("## Quick feedback\n")
             lines.append("- No obvious issues — clear and natural.\n")
 
-        # Guidance for Claude on how to use this.
         lines.append("## For Claude\n")
         if not self.transcript:
             lines.append(
                 "The user's recording was silent or very quiet. Ask them to repeat, "
                 "and consider suggesting they run `check_mic` if this happens twice."
             )
-        elif feedback_bullets:
+        elif feedback:
             lines.append(
                 "Respond conversationally to what the user actually said (above). "
                 "You MAY weave the feedback in naturally — for example, subtly using "
@@ -374,82 +483,6 @@ class AssessmentResult:
 
         return "\n".join(lines)
 
-    def _find_mismatches(self) -> list[tuple[str, str, str]]:
-        """Compare transcript to reference using sequence alignment."""
-        if not self.reference_text:
-            return []
-
-        ref_words = _normalize_words(self.reference_text)
-        heard_words = _normalize_words(self.transcript)
-
-        if not ref_words or not heard_words:
-            return [(w, "(skipped)", "") for w in ref_words]
-
-        matcher = SequenceMatcher(None, ref_words, heard_words)
-        mismatches = []
-
-        for op, ref_start, ref_end, heard_start, heard_end in matcher.get_opcodes():
-            if op == "equal":
-                continue
-            elif op == "replace":
-                # Words that were substituted
-                for i, ref in enumerate(ref_words[ref_start:ref_end]):
-                    if heard_start + i < heard_end:
-                        heard = heard_words[heard_start + i]
-                        hint = SUBSTITUTION_HINTS.get((ref, heard), "")
-                        mismatches.append((ref, heard, hint))
-                    else:
-                        mismatches.append((ref, "(skipped)", ""))
-            elif op == "delete":
-                # Words in reference that were skipped
-                for ref in ref_words[ref_start:ref_end]:
-                    mismatches.append((ref, "(skipped)", ""))
-            elif op == "insert":
-                # Extra words the speaker added — mark but don't penalize
-                for heard in heard_words[heard_start:heard_end]:
-                    mismatches.append(("", "(extra)", ""))
-
-        return mismatches
-
-    def _get_korean_tips(self) -> list[str]:
-        """Generate tips based on detected Korean-speaker patterns."""
-        tips = []
-        spoken_words = set(self.transcript.lower().split())
-
-        # Check each phoneme group
-        th_spoken = spoken_words & _TH_WORDS
-        if th_spoken:
-            low = [w for w in self.low_confidence_words if w.word.lower() in _TH_WORDS]
-            if low:
-                words_str = ", ".join(w.word for w in low)
-                tips.append(f"/θ/ and /ð/: Place tongue between teeth. Check: {words_str}")
-
-        f_spoken = spoken_words & _F_WORDS
-        if f_spoken:
-            low = [w for w in self.low_confidence_words if w.word.lower() in _F_WORDS]
-            if low:
-                tips.append("/f/: Bite lower lip gently and blow. Don't use both lips (/p/).")
-
-        v_spoken = spoken_words & _V_WORDS
-        if v_spoken:
-            low = [w for w in self.low_confidence_words if w.word.lower() in _V_WORDS]
-            if low:
-                tips.append("/v/: Bite lower lip and vibrate vocal cords. Not /b/.")
-
-        rl_spoken = spoken_words & _RL_WORDS
-        if rl_spoken:
-            low = [w for w in self.low_confidence_words if w.word.lower() in _RL_WORDS]
-            if low:
-                tips.append("/r/ vs /l/: For /r/ curl tongue back. For /l/ touch tongue to ridge.")
-
-        return tips
-
-
-def _normalize_words(text: str) -> list[str]:
-    """Normalize text to lowercase word list for comparison."""
-    text = re.sub(r"[^\w\s]", "", text.lower())
-    return text.split()
-
 
 def _speed_label(wpm: float) -> str:
     if wpm <= 0:
@@ -467,13 +500,12 @@ def _speed_label(wpm: float) -> str:
 # Whisper engine
 # ---------------------------------------------------------------------------
 
-# Default model — English-only variant for better pronunciation accuracy at
-# small size. Override with MCP_PRONUNCIATION_MODEL env var.
+
 DEFAULT_MODEL = os.environ.get("MCP_PRONUNCIATION_MODEL", "base.en")
 
 
 def _detect_device() -> tuple[str, str]:
-    """Auto-detect the best device and compute type."""
+    """Auto-detect the best device and compute type for faster-whisper."""
     try:
         import ctranslate2
 
@@ -486,7 +518,7 @@ def _detect_device() -> tuple[str, str]:
 
 
 class PronunciationAssessor:
-    """Pronunciation assessment engine using faster-whisper."""
+    """Orchestrates Whisper + alignment + phonemes + prosody."""
 
     def __init__(self, model_size: str | None = None):
         self._model_size = model_size or DEFAULT_MODEL
@@ -517,46 +549,56 @@ class PronunciationAssessor:
         audio_path: Path,
         reference_text: str | None = None,
     ) -> AssessmentResult:
-        """Assess pronunciation of an audio file."""
+        """Assess pronunciation of an audio file.
+
+        Whisper decoding is NOT biased by the reference text — biasing
+        causes Whisper to fill in words the user actually skipped. Instead,
+        Whisper-bias mitigation happens below via wav2vec2 CTC forced
+        alignment, which checks acoustic evidence against each reference
+        word independently of Whisper's language-model-weighted decoder.
+        """
         model = self._get_model()
 
-        segments, info = model.transcribe(
+        # We intentionally do NOT bias Whisper with `initial_prompt=reference`:
+        # that causes Whisper to fill in words the user actually skipped,
+        # masking real errors. Whisper's own bias toward common n-grams is
+        # instead mitigated by the wav2vec2 forced-alignment step below,
+        # which checks whether the user acoustically produced each reference
+        # word regardless of what Whisper's decoder output.
+        segments_iter, info = model.transcribe(
             str(audio_path),
             language="en",
-            beam_size=1,
+            beam_size=5,
             best_of=1,
             temperature=0.0,
             word_timestamps=True,
             vad_filter=True,
-            vad_parameters=dict(min_silence_duration_ms=300),
+            vad_parameters=dict(min_silence_duration_ms=500),
         )
 
         words: list[WordResult] = []
         full_text_parts: list[str] = []
-
-        for segment in segments:
+        for segment in segments_iter:
             full_text_parts.append(segment.text.strip())
             if segment.words:
                 for w in segment.words:
-                    wr = WordResult(
-                        word=w.word.strip(),
-                        start=w.start,
-                        end=w.end,
-                        probability=w.probability,
+                    words.append(
+                        WordResult(
+                            word=w.word.strip(),
+                            start=w.start,
+                            end=w.end,
+                            probability=w.probability,
+                        )
                     )
-                    if w.probability < 0.5:
-                        wr.issue = f"Very unclear ({w.probability:.0%})"
-                    elif w.probability < 0.7:
-                        wr.issue = f"Unclear ({w.probability:.0%})"
-                    words.append(wr)
+        transcript = " ".join(full_text_parts).strip()
+        transcript = re.sub(r"\s+", " ", transcript)
 
-        transcript = " ".join(full_text_parts)
+        # Speech duration: sum of per-word spans. Correctly excludes silence
+        # between words and fixes the v0.2 WPM bug where long pauses inflated
+        # the denominator.
+        speech_dur = sum(max(0.0, w.end - w.start) for w in words)
 
-        speech_dur = 0.0
-        if words:
-            speech_dur = words[-1].end - words[0].start
-
-        return AssessmentResult(
+        result = AssessmentResult(
             transcript=transcript,
             reference_text=reference_text,
             words=words,
@@ -565,3 +607,142 @@ class PronunciationAssessor:
             language=info.language,
             language_prob=info.language_probability,
         )
+
+        # Alignment + phoneme diffs + Korean patterns run only with a reference.
+        if reference_text:
+            self._run_reference_analysis(result, audio_path)
+
+        # Prosody runs in all cases (needs audio + word timings only). When
+        # forced alignment is available, prefer its timestamps over Whisper's —
+        # they cover the full audio even when Whisper truncates the transcript.
+        prosody_words = self._prosody_words(result, reference_text)
+        result.prosody = prosody_analyze(audio_path, prosody_words, reference_text)
+
+        return result
+
+    # -----------------------------------------------------------------
+
+    # Forced-alignment confidence thresholds. Calibrated on the five
+    # regression clips; tune if they miscategorize many cases.
+    _FA_MATCH_THRESHOLD = 0.50    # >= this -> user produced the word
+    _FA_WEAK_THRESHOLD = 0.25     # between WEAK and MATCH -> unclear production
+
+    def _run_reference_analysis(
+        self,
+        r: AssessmentResult,
+        audio_path: Path,
+    ) -> None:
+        """Populate alignment / phoneme_diffs / korean_l1_patterns / drills."""
+        ref_tokens = tokenize(r.reference_text or "")
+        hyp_tokens = tokenize(r.transcript)
+        aligned = align_words(ref_tokens, hyp_tokens)
+
+        # --- forced alignment overlay -------------------------------
+        # Run wav2vec2 CTC forced alignment when torch+torchaudio are
+        # available. This verifies whether each reference word was actually
+        # produced, even if Whisper misheard it.
+        fa = forced_align.align(audio_path, r.reference_text or "")
+        fa_by_ref_idx: dict[int, float] = {}
+        fa_spans: dict[int, tuple[float, float]] = {}
+        if fa is not None:
+            r.forced_alignment_used = True
+            for w in fa.words:
+                fa_by_ref_idx[w.ref_index] = w.confidence
+                fa_spans[w.ref_index] = (w.start, w.end)
+
+        for a in aligned:
+            if a.ref_index is not None and a.ref_index in fa_by_ref_idx:
+                a.forced_confidence = fa_by_ref_idx[a.ref_index]
+
+        # Adjust ops based on forced alignment. Two cases:
+        #   (a) op=="sub" but forced confidence high -> user said it correctly,
+        #       Whisper biased to a similar-sounding common word.
+        #   (b) op=="del" but forced confidence high -> user said it, Whisper
+        #       truncated or dropped the word.
+        # In both cases flip to "match" and attach a note. The hyp field is
+        # kept for debug visibility into Whisper's mistake.
+        if r.forced_alignment_used:
+            for a in aligned:
+                if a.forced_confidence is None:
+                    continue
+                if a.op == "sub" and a.forced_confidence >= self._FA_MATCH_THRESHOLD:
+                    a.op = "match"
+                    a.note = f"Whisper misheard as '{a.hyp}'; acoustic evidence matched"
+                elif a.op == "del" and a.forced_confidence >= self._FA_MATCH_THRESHOLD:
+                    a.op = "match"
+                    a.note = "Whisper dropped this word but acoustic evidence matched"
+                elif a.op == "match" and a.forced_confidence < self._FA_WEAK_THRESHOLD:
+                    # Whisper accepted it but acoustic evidence is weak — likely
+                    # an unclear production that Whisper guessed from context.
+                    a.note = f"Low acoustic confidence ({a.forced_confidence:.0%})"
+
+        r.aligned = aligned
+
+        # --- timestamps for Korean-L1 pattern examples --------------
+        ref_timestamps: dict[int, float] = {}
+        # Prefer forced-alignment timestamps (cover full audio).
+        for idx, (start, _end) in fa_spans.items():
+            if start > 0:
+                ref_timestamps[idx] = start
+        # Back-fill from Whisper word timing when forced timing was zero
+        # (word was missing per FA).
+        hyp_token_to_word: dict[int, WordResult] = {}
+        flat_hyp_idx = 0
+        for wr in r.words:
+            for _tok in tokenize(wr.word):
+                hyp_token_to_word[flat_hyp_idx] = wr
+                flat_hyp_idx += 1
+        for a in aligned:
+            if a.ref_index is None or a.ref_index in ref_timestamps:
+                continue
+            if a.hyp_index is not None and a.hyp_index in hyp_token_to_word:
+                ref_timestamps[a.ref_index] = hyp_token_to_word[a.hyp_index].start
+
+        # --- phoneme diffs (skip ops flipped to match by FA) ----------
+        diffs: list[PhonemeDiff] = []
+        for a in aligned:
+            if a.op == "match" or a.ref is None:
+                continue
+            d = diff_word(a.ref, a.hyp)
+            if d is not None:
+                diffs.append(d)
+        r.phoneme_diffs = diffs
+
+        # Korean-L1 patterns still run over the full alignment: some patterns
+        # (e.g. article_omission) fire on `del` ops, and cluster-deletion fires
+        # on phoneme diffs.
+        r.korean_l1_patterns = detect_patterns(aligned, diffs, ref_timestamps)
+        r.drills = suggest_drills(r.korean_l1_patterns, diffs)
+
+    def _prosody_words(
+        self,
+        r: AssessmentResult,
+        reference_text: str | None,
+    ) -> list[TimedWord]:
+        """Build the TimedWord list prosody operates on.
+
+        Prefers forced-alignment timestamps (reference-word-keyed, spans the
+        full audio) and falls back to Whisper's word timings when FA is
+        unavailable or when a specific reference word wasn't produced.
+        """
+        # FA timestamps would require a separate span channel on AlignedWord;
+        # for now we use Whisper's word timings, which are adequate for the
+        # coarse pause + pitch checks we run.
+        from_whisper = [
+            TimedWord(word=w.word.strip(" ,.?!"), start=w.start, end=w.end)
+            for w in r.words
+        ]
+
+        # Annotate clause boundaries from the reference text when available.
+        if reference_text:
+            from .prosody import mark_clause_boundaries
+
+            boundaries = mark_clause_boundaries(reference_text, r.aligned)
+            # Whisper tokens don't map 1:1 to reference tokens, so this is
+            # best-effort: mark the whisper word as boundary if its token
+            # index matches a boundary in the reference.
+            for i, tw in enumerate(from_whisper):
+                if i in boundaries:
+                    tw.is_clause_boundary = boundaries[i]
+
+        return from_whisper

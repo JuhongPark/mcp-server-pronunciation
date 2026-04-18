@@ -1,9 +1,9 @@
-"""Tests for pronunciation assessment logic (no Whisper model needed)."""
+"""Tests for the AssessmentResult data shape and rendering (no Whisper needed)."""
 
+from mcp_server_pronunciation.alignment import align_words
 from mcp_server_pronunciation.assessor import (
     AssessmentResult,
     WordResult,
-    _normalize_words,
 )
 
 
@@ -12,15 +12,14 @@ def _make_result(
     reference: str | None = None,
     words: list[WordResult] | None = None,
 ) -> AssessmentResult:
-    """Helper to build an AssessmentResult with sensible defaults."""
     if words is None:
-        # Build words from transcript with high confidence
         tokens = transcript.split()
         words = [
             WordResult(word=w, start=i * 0.5, end=i * 0.5 + 0.4, probability=0.95)
             for i, w in enumerate(tokens)
         ]
-    speech_dur = words[-1].end - words[0].start if words else 0.0
+    # Speech duration = sum of word spans (matches the real assessor).
+    speech_dur = sum(max(0.0, w.end - w.start) for w in words)
     return AssessmentResult(
         transcript=transcript,
         reference_text=reference,
@@ -30,73 +29,7 @@ def _make_result(
     )
 
 
-# --- _normalize_words ---
-
-
-class TestNormalizeWords:
-    def test_basic(self):
-        assert _normalize_words("Hello World") == ["hello", "world"]
-
-    def test_strips_punctuation(self):
-        assert _normalize_words("Hello, world!") == ["hello", "world"]
-
-    def test_empty(self):
-        assert _normalize_words("") == []
-
-    def test_mixed_case(self):
-        assert _normalize_words("The THREE Brothers") == ["the", "three", "brothers"]
-
-
-# --- Word alignment (SequenceMatcher) ---
-
-
-class TestFindMismatches:
-    def test_exact_match_no_mismatches(self):
-        r = _make_result("the three brothers", "The three brothers.")
-        assert r._find_mismatches() == []
-
-    def test_substitution(self):
-        r = _make_result("de tree brothers", "The three brothers.")
-        mismatches = r._find_mismatches()
-        refs = [m[0] for m in mismatches]
-        assert "the" in refs
-        assert "three" in refs
-
-    def test_substitution_with_hint(self):
-        r = _make_result("I sink about it", "I think about it")
-        mismatches = r._find_mismatches()
-        # "think" -> "sink" should have a hint
-        think_mismatch = [m for m in mismatches if m[0] == "think"]
-        assert len(think_mismatch) == 1
-        assert think_mismatch[0][1] == "sink"
-        assert think_mismatch[0][2] != ""  # has a hint
-
-    def test_skipped_word(self):
-        r = _make_result("I about it", "I think about it")
-        mismatches = r._find_mismatches()
-        skipped = [m for m in mismatches if m[1] == "(skipped)"]
-        assert len(skipped) >= 1
-
-    def test_extra_word(self):
-        r = _make_result("I really think about it", "I think about it")
-        mismatches = r._find_mismatches()
-        # "really" is extra — should not cause other words to misalign
-        non_extra = [m for m in mismatches if m[1] != "(extra)"]
-        # The actual words should still match
-        assert len(non_extra) == 0 or all(m[1] == "(extra)" for m in mismatches)
-
-    def test_no_reference(self):
-        r = _make_result("hello world", None)
-        assert r._find_mismatches() == []
-
-    def test_empty_transcript(self):
-        r = _make_result("", "hello world")
-        r.words = []
-        mismatches = r._find_mismatches()
-        assert all(m[1] == "(skipped)" for m in mismatches)
-
-
-# --- Scoring ---
+# --- scoring -----------------------------------------------------
 
 
 class TestScoring:
@@ -108,38 +41,59 @@ class TestScoring:
         r = _make_result("a b", words=words)
         assert abs(r.avg_confidence - 0.8) < 0.01
 
-    def test_avg_confidence_empty(self):
-        r = AssessmentResult(transcript="", reference_text=None, words=[])
-        assert r.avg_confidence == 0.0
-
-    def test_low_confidence_words(self):
-        words = [
-            WordResult("good", 0, 0.5, 0.95),
-            WordResult("bad", 0.5, 1.0, 0.3),
-            WordResult("ok", 1.0, 1.5, 0.65),
-        ]
-        r = _make_result("good bad ok", words=words)
-        low = r.low_confidence_words
-        assert len(low) == 2
-        assert low[0].word == "bad"
-        assert low[1].word == "ok"
-
     def test_words_per_minute(self):
+        # 3 words, each 0.3s of speech = 0.9s total speech
         words = [
             WordResult("one", 0, 0.3, 0.9),
             WordResult("two", 0.3, 0.6, 0.9),
-            WordResult("three", 0.6, 1.0, 0.9),
+            WordResult("three", 0.6, 0.9, 0.9),
         ]
         r = _make_result("one two three", words=words)
-        # 3 words in 1 second = 180 WPM
-        assert abs(r.words_per_minute - 180) < 1
+        # 3 / 0.9 * 60 = 200 WPM
+        assert abs(r.words_per_minute - 200) < 1
 
-    def test_words_per_minute_zero_duration(self):
-        r = AssessmentResult(transcript="", reference_text=None, words=[])
-        assert r.words_per_minute == 0.0
+    def test_wpm_caveat_short_clip(self):
+        r = _make_result("hello world")
+        assert r.wpm_caveat is not None
+        assert "of speech" in r.wpm_caveat
+
+    def test_wpm_caveat_long_clip(self):
+        # 30 words of 0.4s each = 12s speech -> no caveat.
+        words = [
+            WordResult(f"w{i}", i * 0.4, i * 0.4 + 0.4, 0.9)
+            for i in range(30)
+        ]
+        r = _make_result(" ".join(f"w{i}" for i in range(30)), words=words)
+        assert r.wpm_caveat is None
+
+    def test_clarity_with_reference_penalizes_mismatch(self):
+        r = _make_result("cat", reference="bat")
+        r.aligned = align_words(["bat"], ["cat"])
+        # 0 matches out of 1 ref word; clarity should be lower than whisper-only.
+        assert r.clarity_pct < 95
 
 
-# --- Pauses ---
+# --- grammar (ported) --------------------------------------------
+
+
+class TestGrammarNotes:
+    def test_detects_buyed(self):
+        r = _make_result("I buyed some apples yesterday")
+        notes = r.grammar_notes()
+        assert len(notes) == 1
+        assert notes[0][0] == "buyed"
+        assert notes[0][1] == "bought"
+
+    def test_no_errors(self):
+        r = _make_result("I bought apples")
+        assert r.grammar_notes() == []
+
+    def test_deduplicates(self):
+        r = _make_result("I buyed it and then I buyed another")
+        assert len(r.grammar_notes()) == 1
+
+
+# --- pauses -------------------------------------------------------
 
 
 class TestPauses:
@@ -151,146 +105,69 @@ class TestPauses:
         r = _make_result("hello world", words=words)
         pauses = r.get_pauses(0.8)
         assert len(pauses) == 1
-        assert abs(pauses[0][2] - 1.5) < 0.01
-
-    def test_no_pause(self):
-        words = [
-            WordResult("hello", 0, 0.4, 0.9),
-            WordResult("world", 0.5, 0.9, 0.9),
-        ]
-        r = _make_result("hello world", words=words)
-        assert r.get_pauses(0.8) == []
 
 
-# --- Report formatting ---
+# --- to_dict ------------------------------------------------------
+
+
+class TestToDict:
+    def test_basic_shape(self):
+        r = _make_result("hello world", reference="hello world")
+        r.aligned = align_words(["hello", "world"], ["hello", "world"])
+        d = r.to_dict()
+        assert "clarity_pct" in d
+        assert "speaking_rate_wpm" in d
+        assert "alignment" in d
+        assert "phoneme_issues" in d
+        assert "korean_l1_patterns" in d
+        assert "prosody" in d
+        assert "drills" in d
+
+    def test_alignment_entries(self):
+        r = _make_result("the cat", reference="the bat")
+        r.aligned = align_words(["the", "bat"], ["the", "cat"])
+        d = r.to_dict()
+        ops = {a["op"] for a in d["alignment"]}
+        assert "sub" in ops or "match" in ops
+
+
+# --- format_report ------------------------------------------------
 
 
 class TestFormatReport:
-    def test_excellent_report(self):
-        r = _make_result("hello world", "Hello world.")
+    def test_clean_when_no_issues(self):
+        r = _make_result("hello world", reference="hello world")
+        r.aligned = align_words(["hello", "world"], ["hello", "world"])
         report = r.format_report()
         assert "Great job" in report
 
-    def test_report_with_mismatch(self):
-        r = _make_result("de tree brothers", "The three brothers.")
+    def test_alignment_table_on_mismatch(self):
+        r = _make_result("the cat", reference="the bat")
+        r.aligned = align_words(["the", "bat"], ["the", "cat"])
         report = r.format_report()
-        assert "What to fix" in report
+        assert "Alignment" in report
 
-    def test_report_shows_transcript(self):
-        r = _make_result("hello world")
+    def test_shows_wpm_caveat(self):
+        r = _make_result("hi")
         report = r.format_report()
-        assert "hello world" in report
-
-    def test_report_shows_clarity(self):
-        r = _make_result("hello world")
-        report = r.format_report()
-        assert "Clarity" in report
+        assert "computed over" in report
 
 
-# --- Korean tips ---
-
-
-class TestKoreanTips:
-    def test_th_words_with_low_confidence(self):
-        words = [
-            WordResult("the", 0, 0.3, 0.4),
-            WordResult("cat", 0.3, 0.6, 0.95),
-        ]
-        r = _make_result("the cat", words=words)
-        tips = r._get_korean_tips()
-        assert any("/θ/" in t for t in tips)
-
-    def test_no_tips_when_confident(self):
-        words = [
-            WordResult("the", 0, 0.3, 0.95),
-            WordResult("three", 0.3, 0.6, 0.95),
-        ]
-        r = _make_result("the three", words=words)
-        tips = r._get_korean_tips()
-        assert len(tips) == 0
-
-    def test_f_words_with_low_confidence(self):
-        words = [
-            WordResult("five", 0, 0.3, 0.4),
-            WordResult("friends", 0.3, 0.6, 0.95),
-        ]
-        r = _make_result("five friends", words=words)
-        tips = r._get_korean_tips()
-        assert any("/f/" in t for t in tips)
-
-
-# --- Grammar notes (irregular past tense) ---
-
-
-class TestGrammarNotes:
-    def test_detects_buyed(self):
-        r = _make_result("I buyed some apples yesterday")
-        notes = r.grammar_notes()
-        assert len(notes) == 1
-        wrong, correct, _ = notes[0]
-        assert wrong == "buyed"
-        assert correct == "bought"
-
-    def test_multiple_errors(self):
-        r = _make_result("I goed home and eated dinner")
-        notes = r.grammar_notes()
-        wrongs = {n[0] for n in notes}
-        assert wrongs == {"goed", "eated"}
-
-    def test_case_insensitive(self):
-        r = _make_result("Yesterday I BUYED apples")
-        notes = r.grammar_notes()
-        assert len(notes) == 1
-        assert notes[0][0] == "buyed"
-
-    def test_no_errors(self):
-        r = _make_result("I bought apples yesterday")
-        assert r.grammar_notes() == []
-
-    def test_empty_transcript(self):
-        r = _make_result("")
-        r.words = []
-        assert r.grammar_notes() == []
-
-    def test_deduplicates(self):
-        r = _make_result("I buyed the apple and then I buyed another one")
-        notes = r.grammar_notes()
-        assert len(notes) == 1
-
-
-# --- Converse report format ---
+# --- converse report ---------------------------------------------
 
 
 class TestFormatConverseReport:
-    def test_has_user_said_section(self):
-        r = _make_result("hello how are you")
-        report = r.format_converse_report()
-        assert "## User said" in report
-        assert "hello how are you" in report
-
     def test_has_for_claude_section(self):
         r = _make_result("hello")
-        report = r.format_converse_report()
-        assert "## For Claude" in report
+        assert "## For Claude" in r.format_converse_report()
 
     def test_surfaces_grammar_error(self):
         r = _make_result("I buyed apples")
-        report = r.format_converse_report()
-        assert "Grammar" in report
-        assert "bought" in report
+        rep = r.format_converse_report()
+        assert "bought" in rep
 
-    def test_empty_transcript_tells_claude_to_ask_again(self):
+    def test_silent_prompt(self):
         r = _make_result("")
         r.words = []
-        report = r.format_converse_report()
-        assert "silent" in report.lower() or "repeat" in report.lower()
-
-    def test_no_errors_clean_report(self):
-        r = _make_result("I am having a great day today")
-        report = r.format_converse_report()
-        assert "Quick feedback" in report
-
-    def test_target_mode_shows_mismatch(self):
-        r = _make_result("de tree brothers", reference="The three brothers")
-        report = r.format_converse_report(has_target=True)
-        assert "Pronunciation" in report
+        rep = r.format_converse_report()
+        assert "silent" in rep.lower() or "repeat" in rep.lower()

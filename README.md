@@ -15,7 +15,9 @@ Voice MCP servers today treat speech as a typing replacement. English tutor MCP 
 ## Features
 
 - **Voice conversation** with Claude. Speak, auto-stop on silence, Claude reads your transcript and responds.
-- **Inline English feedback**: pronunciation (word-level clarity + Korean-speaker tips), grammar (common irregular-verb errors), and fluency (pace + long pauses).
+- **Phoneme-level drill feedback** (when a reference sentence is given): Needleman-Wunsch word alignment, per-word expected vs produced IPA, Korean-L1 pattern detection (r/l, th→s, final cluster deletion, intrusive onset vowel, …) with Korean-language tips and minimal-pair drills, and prosody checks (word stress, final-rise intonation, intra-clause pauses).
+- **Whisper-bias mitigation** via optional `[phoneme]` extra: wav2vec2 CTC forced alignment verifies whether the user actually produced each reference word, so rare proper nouns and domain-specific terms that Whisper rewrites toward more common alternatives no longer surface as mispronunciations.
+- **Inline English feedback in conversation**: pronunciation, grammar (common irregular-verb errors), and fluency (pace + long pauses).
 - **Drill mode** (`practice`, `quick_practice`, `retry`) for focused sentence practice.
 - **Local-only**: Whisper model runs on your machine, audio never leaves it.
 - **Cross-platform**: macOS, Linux, Windows, and WSL2 (recording auto-routes through Windows).
@@ -26,6 +28,7 @@ Voice MCP servers today treat speech as a typing replacement. English tutor MCP 
 - Python 3.11+
 - A working microphone
 - ~150 MB disk space for the default Whisper model (`base.en`)
+- Additional ~360 MB if you install the optional `[phoneme]` extra (wav2vec2 weights for forced alignment)
 - MCP spec: targets `2025-06-18` via the official Python SDK (`mcp>=1.2`)
 
 ## Installation
@@ -39,6 +42,10 @@ uv tool install mcp-server-pronunciation
 
 # Or pip
 pip install mcp-server-pronunciation
+
+# Optional: forced-alignment upgrade for Whisper-bias mitigation + tighter
+# phoneme-level feedback. Adds ~200 MB of torch CPU wheels.
+pip install 'mcp-server-pronunciation[phoneme]'
 ```
 
 ### Linux: install PortAudio first
@@ -147,7 +154,7 @@ Add to `.vscode/mcp.json` or your user settings:
 >
 > **You**: "Record me reading it."
 >
-> **Claude** (calls `practice` with that reference): *returns word-level assessment with Korean-speaker tips*
+> **Claude** (calls `practice` with that reference): *returns an alignment table (match / sub / ins / del) with per-word acoustic confidence when the `[phoneme]` extra is installed, phoneme-level issues with expected vs produced IPA, detected Korean-L1 patterns (e.g. /θ/→/s/) with Korean-language tips and minimal-pair drills, and prosody notes (word stress, final-rise intonation, intra-clause pauses).*
 
 ### 3. Retry after feedback
 
@@ -165,7 +172,7 @@ Add to `.vscode/mcp.json` or your user settings:
 | `retry` | Re-record the last sentence the user was practicing. |
 | `suggest_sentence` | Return a practice sentence without recording. |
 | `record` | Record audio and save a WAV file (raw, no analysis). |
-| `assess` | Assess the last recording (or a specified WAV) without re-recording. |
+| `assess` | Assess the last recording (or a specified WAV) without re-recording. When given a reference, runs the full drill pipeline (alignment, phoneme diff, Korean-L1 patterns, prosody). |
 | `check_mic` | List available audio input devices. |
 
 ## Configuration
@@ -206,6 +213,12 @@ export HF_HUB_CACHE=/path/to/cache
 ```bash
 claude mcp add pronunciation -e MCP_PRONUNCIATION_MODEL=small.en -- uvx mcp-server-pronunciation
 ```
+
+### Phoneme analysis extras
+
+Installing `mcp-server-pronunciation[phoneme]` enables wav2vec2-based CTC forced alignment. It verifies which reference words the user acoustically produced, regardless of how Whisper's language-model-weighted decoder rewrote them — so rare proper nouns and domain terms no longer surface as false mispronunciations. On first run the extra downloads ~360 MB of weights into `~/.cache/torch/hub/` (override via `TORCH_HOME`). Inference is CPU-only by default and runtime-quantized to int8 (~95 MB RAM).
+
+Without the extra, `assess` / `practice` still run the full pipeline except for the forced-alignment step: you get Needleman-Wunsch word alignment against the Whisper hypothesis, CMUdict phoneme-sequence diff, Korean-L1 pattern detection, and prosody.
 
 ## Platform Support
 
@@ -257,7 +270,8 @@ Claude Desktop launches MCP servers from a GUI-only environment without `~/.loca
 - All audio processing happens **locally** on your machine.
 - Recordings are temporary `.wav` files under your system temp directory (`$TMPDIR`) and are deleted when the OS cleans them up.
 - The Whisper model runs locally — no audio data is sent to any external service.
-- No telemetry. No analytics. No network calls except the one-time Whisper weight download from Hugging Face.
+- When the optional `[phoneme]` extra is installed, the wav2vec2 forced aligner also runs locally. Weights are downloaded once from the PyTorch Hub.
+- No telemetry. No analytics. No network calls except the one-time model weight downloads (Whisper from Hugging Face, wav2vec2 from PyTorch Hub).
 
 ## Development
 
@@ -284,3 +298,7 @@ Third-party components (all MIT / permissive):
 - [CTranslate2](https://github.com/OpenNMT/CTranslate2) — MIT
 - [`sounddevice`](https://python-sounddevice.readthedocs.io/) — MIT
 - [PortAudio](http://www.portaudio.com/) — MIT
+- [`cmudict`](https://pypi.org/project/cmudict/) — BSD
+- [`g2p-en`](https://github.com/Kyubyong/g2p) — Apache 2.0
+- [`librosa`](https://librosa.org/) — ISC
+- Optional (`[phoneme]` extra): [PyTorch](https://pytorch.org/) — BSD, [torchaudio](https://pytorch.org/audio/) — BSD, [wav2vec2 weights](https://github.com/facebookresearch/fairseq) — MIT
