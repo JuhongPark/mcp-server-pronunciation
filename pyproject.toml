@@ -1,7 +1,7 @@
 [project]
 name = "mcp-server-pronunciation"
-version = "0.2.0"
-description = "MCP server for voice conversation with Claude plus English pronunciation, grammar, and fluency feedback"
+version = "0.3.0"
+description = "MCP server for voice conversation with Claude plus English pronunciation, grammar, and fluency feedback with phoneme-level analysis and Korean-L1 pattern detection"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
@@ -35,12 +35,27 @@ dependencies = [
     "faster-whisper>=1.0,<2",
     "sounddevice>=0.4,<0.6",
     "numpy>=1.24,<3",
+    # Pronunciation analysis:
+    "cmudict>=1.0",              # offline ARPAbet dictionary (~10MB)
+    "g2p-en>=2.1",               # neural G2P fallback for OOV words (~30MB)
+    "librosa>=0.10,<1",          # prosody: f0 + RMS via pyin
 ]
 
 [project.optional-dependencies]
+# Optional: wav2vec2 forced alignment for Whisper-bias mitigation. When
+# installed, `assess` / `practice` run CTC forced alignment against the
+# reference text to verify which words the user actually produced, even
+# when Whisper misheard rare proper nouns or domain terms. Adds ~200MB of
+# torch CPU wheels plus a one-time ~360MB wav2vec2 weight download.
+phoneme = [
+    "torch>=2.2",
+    "torchaudio>=2.2",
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.4",
+    "torch>=2.2",
+    "torchaudio>=2.2",
 ]
 
 [project.scripts]
