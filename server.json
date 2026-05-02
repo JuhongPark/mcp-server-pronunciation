@@ -3,7 +3,7 @@
   "name": "io.github.juhongpark/pronunciation",
   "title": "Pronunciation & Voice Coach",
   "description": "MCP server for voice conversation with Claude plus English pronunciation, grammar, and fluency feedback — runs locally with faster-whisper.",
-  "version": "0.3.0",
+  "version": "0.3.0b1",
   "repository": {
     "url": "https://github.com/JuhongPark/mcp-server-pronunciation",
     "source": "github"
@@ -13,7 +13,7 @@
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "mcp-server-pronunciation",
-      "version": "0.3.0",
+      "version": "0.3.0b1",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"

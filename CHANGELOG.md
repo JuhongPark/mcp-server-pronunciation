@@ -2,10 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+Final releases use semantic versioning, and Python pre-releases use PEP 440
+spelling such as `0.3.0b1`.
 
-## [0.3.0] — Unreleased
+## [0.3.0b1] — Unreleased
+
+### Beta Notice
+
+- This is an early public beta. It may contain bugs, runtime errors,
+  inaccurate transcripts, inaccurate pronunciation feedback, or
+  platform-specific recording issues. Use it for experimentation and
+  language-learning practice only, and review outputs carefully before relying
+  on them.
 
 ### Changed
 
