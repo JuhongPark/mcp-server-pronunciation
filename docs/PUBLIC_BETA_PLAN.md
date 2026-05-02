@@ -75,11 +75,15 @@ For a final stable release of the same feature line, use `0.3.0`.
 1. Add and review the public beta disclaimer.
 2. Update package metadata to the beta version and beta classifier.
 3. Update release docs with beta-specific instructions.
-4. Run formatting, lint, and tests.
-5. Scan changed files for secrets, private data, bundled datasets, or
+4. Review [PUBLICATION.md](PUBLICATION.md) and confirm registration
+   prerequisites.
+5. Run formatting, lint, and tests.
+6. Scan changed files for secrets, private data, bundled datasets, or
    license-incompatible content.
-6. Push the preparation commits to `main`.
-7. When ready to publish, create a pre-release tag and GitHub Release:
+7. Push the preparation commits to `main`.
+8. Configure the PyPI pending Trusted Publisher from the maintainer's PyPI
+   account.
+9. When ready to publish, create a pre-release tag and GitHub Release:
 
 ```bash
 git tag v0.3.0b1
@@ -90,8 +94,10 @@ gh release create v0.3.0b1 \
   --prerelease
 ```
 
-The tag push will trigger the PyPI release workflow. Do not push the tag until
-the beta disclaimer, metadata, and validation checks are in place.
+The tag push will trigger the release workflow. That workflow publishes to PyPI
+first and then publishes `server.json` to the MCP Registry. Do not push the tag
+until the beta disclaimer, metadata, validation checks, and PyPI pending
+Trusted Publisher are in place.
 
 ## Acceptance Criteria
 

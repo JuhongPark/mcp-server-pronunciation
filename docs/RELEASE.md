@@ -35,6 +35,8 @@ uv run pytest -v
 - Confirm `server.json` points at the intended package version.
 - For a beta release, use a PEP 440 beta version such as `0.3.0b1` and a
   matching tag such as `v0.3.0b1`.
+- Confirm the PyPI pending Trusted Publisher exists before the first PyPI
+  publish. See [PUBLICATION.md](PUBLICATION.md).
 - Run `mcp-server-pronunciation doctor` in a fresh environment when possible.
 - Scan changed files for credentials, private data, and bundled datasets.
 
@@ -72,9 +74,8 @@ git push origin vX.Y.Z
 ## Post-Release
 
 - Confirm the PyPI page shows the new version.
+- Confirm the MCP Registry search returns `io.github.juhongpark/pronunciation`.
 - Confirm `uvx mcp-server-pronunciation doctor` works from a clean cache or a
   documented first-run state.
-- If submitting to an MCP registry, validate and submit the matching
-  `server.json`.
 - Publish benchmark summaries only as reports. Do not upload third-party
   benchmark datasets to this repository.
