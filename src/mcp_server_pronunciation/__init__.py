@@ -5,7 +5,14 @@ lazy so that running `mcp-server-pronunciation doctor` doesn't trigger the
 Whisper pre-load thread.
 """
 
-__all__ = ["run", "cli_main"]
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("mcp-server-pronunciation")
+except PackageNotFoundError:  # pragma: no cover - editable source fallback
+    __version__ = "0.0.0+local"
+
+__all__ = ["run", "cli_main", "__version__"]
 
 
 def cli_main(*args, **kwargs):
