@@ -290,7 +290,7 @@ Claude Desktop launches MCP servers from a GUI-only environment without `~/.loca
 
 ## Benchmark Status
 
-This project is moving toward benchmark-backed scoring. Planned public benchmark work is tracked in [ROADMAP.md](ROADMAP.md), and the current benchmark helper docs live in [docs/BENCHMARKS.md](docs/BENCHMARKS.md). The primary candidate is Speechocean762 because it has a permissive CC BY 4.0 license and multi-level expert pronunciation scores. L2-ARCTIC is useful for Korean-L1 and phone-error research checks, but its non-commercial license means it should remain optional and separate from default release claims.
+This project is moving toward benchmark-backed scoring. Planned public benchmark work is tracked in [ROADMAP.md](ROADMAP.md), the testing methodology lives in [docs/TESTING.md](docs/TESTING.md), and the current benchmark helper docs live in [docs/BENCHMARKS.md](docs/BENCHMARKS.md). The primary candidate is Speechocean762 because it has a permissive CC BY 4.0 license and multi-level expert pronunciation scores. L2-ARCTIC is useful for Korean-L1 and phone-error research checks, but its non-commercial license means it should remain optional and separate from default release claims.
 
 ## Privacy
 
