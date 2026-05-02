@@ -15,6 +15,7 @@ import platform
 import subprocess
 import tempfile
 import threading
+import uuid
 import wave
 from pathlib import Path
 
@@ -98,6 +99,28 @@ def _ps1_win_path() -> str:
         text=True,
         check=True,
     ).stdout.strip()
+
+
+@functools.lru_cache(maxsize=1)
+def _windows_temp_dir() -> str:
+    """Return the Windows temp directory used by PowerShell recording."""
+    try:
+        result = subprocess.run(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-Command",
+                "[System.IO.Path]::GetTempPath()",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return "C:\\Windows\\Temp"
+    if result.returncode == 0 and result.stdout.strip():
+        return result.stdout.strip().rstrip("\\/")
+    return "C:\\Windows\\Temp"
 
 
 def record_audio(duration: float, output_path: Path | None = None) -> Path:
@@ -213,7 +236,7 @@ def _record_wsl(duration: float, output_path: Path) -> None:
         raise RuntimeError(f"PowerShell recording script not found: {_PS1_SCRIPT}")
 
     ps1_win = _ps1_win_path()
-    win_temp = f"C:\\temp\\pronun_{os.getpid()}.wav"
+    win_temp = f"{_windows_temp_dir()}\\pronun_{os.getpid()}_{uuid.uuid4().hex}.wav"
 
     result = subprocess.run(
         [

@@ -208,6 +208,18 @@ By default Whisper weights are cached in `~/.cache/huggingface/hub/`. Override w
 export HF_HUB_CACHE=/path/to/cache
 ```
 
+### Temporary recordings
+
+Recordings are written as temporary WAV files so `assess` can inspect the last
+recording. By default they are removed when the server process exits:
+
+```bash
+export MCP_PRONUNCIATION_AUDIO_RETENTION=session
+```
+
+Set `MCP_PRONUNCIATION_AUDIO_RETENTION=keep` if you want temporary recordings
+to remain on disk for manual inspection.
+
 ### Model override in Claude Code
 
 ```bash
@@ -235,7 +247,9 @@ Without the extra, `assess` / `practice` still run the full pipeline except for 
 
 ### `uvx mcp-server-pronunciation doctor` is your first stop
 
-It reports on PortAudio, input devices, Whisper model cache, free disk space, and Python version. Run it whenever something feels off.
+It reports on PortAudio, input devices, Whisper model cache, pronunciation
+resources, optional forced-alignment dependencies, free disk space, and Python
+version. Run it whenever something feels off.
 
 ### `sounddevice` import fails on Linux
 
@@ -272,7 +286,7 @@ Claude Desktop launches MCP servers from a GUI-only environment without `~/.loca
 - Prosody feedback is heuristic. Pitch tracking can be unreliable with noisy audio, very short utterances, vocal fry, overlapping speech, or clipped recordings.
 - Korean-L1 pattern detection is intentionally rule-based. It can miss errors, over-trigger on ASR mistakes, and should be treated as a targeted practice aid.
 - First-time setup may download model or pronunciation resources. Run `doctor` and `pull-model` before relying on the server in a live session.
-- Temporary WAV recordings are written under the system temp directory so that the last recording can be assessed. Treat local temp storage as sensitive if you practice private content.
+- Temporary WAV recordings are written under the system temp directory so that the last recording can be assessed. By default they are removed when the server exits. Set `MCP_PRONUNCIATION_AUDIO_RETENTION=keep` if you want to inspect them later.
 
 ## Benchmark Status
 
@@ -281,7 +295,7 @@ This project is moving toward benchmark-backed scoring. Planned public benchmark
 ## Privacy
 
 - All audio processing happens **locally** on your machine.
-- Recordings are temporary `.wav` files under your system temp directory (`$TMPDIR`) and are deleted when the OS cleans them up.
+- Recordings are temporary `.wav` files under your system temp directory (`$TMPDIR`) and are removed when the server exits unless `MCP_PRONUNCIATION_AUDIO_RETENTION=keep` is set.
 - The Whisper model runs locally — no audio data is sent to any external service.
 - When the optional `[phoneme]` extra is installed, the wav2vec2 forced aligner also runs locally. Weights are downloaded once from the PyTorch Hub.
 - No telemetry. No analytics. No network calls except the one-time model weight downloads (Whisper from Hugging Face, wav2vec2 from PyTorch Hub).

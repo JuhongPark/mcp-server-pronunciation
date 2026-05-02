@@ -6,6 +6,8 @@ import logging
 import random
 import tempfile
 import threading
+import atexit
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -24,6 +26,27 @@ _assessor: PronunciationAssessor | None = None
 _assessor_lock = threading.Lock()
 _last_recording: Path | None = None
 _last_reference: str | None = None
+_recordings_to_cleanup: set[Path] = set()
+
+
+def _audio_retention() -> str:
+    value = os.environ.get("MCP_PRONUNCIATION_AUDIO_RETENTION", "session").strip().lower()
+    return value if value in {"session", "keep"} else "session"
+
+
+def _cleanup_recordings() -> None:
+    if _audio_retention() == "keep":
+        return
+    for path in list(_recordings_to_cleanup):
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            logger.debug("Could not delete temporary recording: %s", path)
+        finally:
+            _recordings_to_cleanup.discard(path)
+
+
+atexit.register(_cleanup_recordings)
 
 
 def _get_assessor() -> PronunciationAssessor:
@@ -64,6 +87,8 @@ def _new_recording_path() -> Path:
     tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False, prefix="pronun_")
     path = Path(tmp.name)
     tmp.close()
+    if _audio_retention() == "session":
+        _recordings_to_cleanup.add(path)
     return path
 
 

@@ -129,6 +129,68 @@ def doctor() -> int:
         _check("Model check", False, str(e))
         all_ok = False
 
+    _print_header("Pronunciation resources")
+    try:
+        import cmudict
+
+        entries = len(cmudict.dict())
+        _check("CMUdict importable", entries > 0, f"{entries:,} entries")
+        if entries == 0:
+            all_ok = False
+    except Exception as e:
+        _check("CMUdict importable", False, str(e))
+        all_ok = False
+
+    try:
+        from g2p_en import G2p  # noqa: F401
+
+        _check("g2p_en importable", True)
+    except Exception as e:
+        _check("g2p_en importable", False, str(e))
+        all_ok = False
+
+    try:
+        import nltk
+
+        nltk_data = os.environ.get("NLTK_DATA") or str(Path.home() / "nltk_data")
+        print(f"  NLTK data:   {nltk_data}", flush=True)
+        for label, path, package in [
+            (
+                "NLTK averaged perceptron tagger",
+                "taggers/averaged_perceptron_tagger_eng",
+                "averaged_perceptron_tagger_eng",
+            ),
+            ("NLTK CMUdict corpus", "corpora/cmudict", "cmudict"),
+        ]:
+            try:
+                found = nltk.data.find(path)
+            except LookupError:
+                _warn(
+                    label,
+                    f"not found. OOV pronunciation fallback may download `{package}` on first use",
+                )
+            else:
+                _check(label, True, str(found))
+    except Exception as e:
+        _warn("NLTK resource probe unavailable", str(e))
+
+    _print_header("Optional forced alignment")
+    torch_home = os.environ.get("TORCH_HOME") or str(Path.home() / ".cache" / "torch")
+    print(f"  Torch cache: {torch_home}", flush=True)
+    try:
+        import torch
+
+        _check("torch importable", True, getattr(torch, "__version__", "unknown"))
+    except Exception as e:
+        _warn("torch not installed", f"{e}. Install with: mcp-server-pronunciation[phoneme]")
+
+    try:
+        import torchaudio
+
+        _check("torchaudio importable", True, getattr(torchaudio, "__version__", "unknown"))
+    except Exception as e:
+        _warn("torchaudio not installed", f"{e}. Install with: mcp-server-pronunciation[phoneme]")
+
     _print_header("Disk space")
     try:
         usage = shutil.disk_usage(Path.home())
