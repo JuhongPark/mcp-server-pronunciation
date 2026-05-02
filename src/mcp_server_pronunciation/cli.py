@@ -277,6 +277,46 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Maximum number of manifest rows to parse.",
     )
+    score_report = bench_sub.add_parser(
+        "score-report",
+        help="Compare human scores and predicted scores from a JSONL export.",
+    )
+    score_report.add_argument(
+        "--predictions",
+        required=True,
+        help="Path to a JSONL file containing human and predicted scores.",
+    )
+    score_report.add_argument(
+        "--gold-field",
+        required=True,
+        help="JSON field or dotted path containing the human score.",
+    )
+    score_report.add_argument(
+        "--pred-field",
+        required=True,
+        help="JSON field or dotted path containing the predicted score.",
+    )
+    score_report.add_argument(
+        "--id-field",
+        default="id",
+        help="JSON field or dotted path containing item ids.",
+    )
+    score_report.add_argument(
+        "--dataset",
+        default="custom",
+        help="Dataset name to write into the report.",
+    )
+    score_report.add_argument(
+        "--output",
+        default="benchmark/results/score_report.json",
+        help="Where to write the JSON report.",
+    )
+    score_report.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of prediction rows to parse.",
+    )
 
     sub.add_parser("serve", help="Run the MCP server (default).")
 
@@ -296,6 +336,34 @@ def main(argv: list[str] | None = None) -> int:
             write_report(report, output_path)
             print(
                 f"Wrote {report.status} report for {len(items)} Speechocean762 items to {output_path}",
+                flush=True,
+            )
+            return 0
+        if args.benchmark == "score-report":
+            from .benchmarks import (
+                load_score_predictions_jsonl,
+                make_score_report,
+                write_report,
+            )
+
+            predictions = load_score_predictions_jsonl(
+                Path(args.predictions),
+                gold_field=args.gold_field,
+                predicted_field=args.pred_field,
+                id_field=args.id_field,
+                limit=args.limit,
+            )
+            report = make_score_report(
+                args.dataset,
+                predictions,
+                gold_field=args.gold_field,
+                predicted_field=args.pred_field,
+            )
+            output_path = Path(args.output)
+            write_report(report, output_path)
+            print(
+                f"Wrote score report for {report.summary['valid_pair_count']}/"
+                f"{report.summary['row_count']} valid pairs to {output_path}",
                 flush=True,
             )
             return 0
