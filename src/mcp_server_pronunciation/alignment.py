@@ -116,9 +116,9 @@ def align_words(ref: list[str], hyp: list[str]) -> list[AlignedWord]:
         for j in range(1, m + 1):
             cost = _sub_cost(ref[i - 1], hyp[j - 1])
             dp[i][j] = min(
-                dp[i - 1][j - 1] + cost,      # match or substitution
-                dp[i - 1][j] + _GAP_COST,     # deletion (ref has extra word)
-                dp[i][j - 1] + _GAP_COST,     # insertion (hyp has extra word)
+                dp[i - 1][j - 1] + cost,  # match or substitution
+                dp[i - 1][j] + _GAP_COST,  # deletion (ref has extra word)
+                dp[i][j - 1] + _GAP_COST,  # insertion (hyp has extra word)
             )
 
     # Traceback. Reconstruct the edit script from the DP table.
@@ -139,9 +139,7 @@ def align_words(ref: list[str], hyp: list[str]) -> list[AlignedWord]:
         best = min(diag, up, left)
         if diag == best:
             op: Op = "match" if ref[i - 1] == hyp[j - 1] else "sub"
-            aligned.append(
-                AlignedWord(ref[i - 1], hyp[j - 1], op, i - 1, j - 1)
-            )
+            aligned.append(AlignedWord(ref[i - 1], hyp[j - 1], op, i - 1, j - 1))
             i -= 1
             j -= 1
         elif up == best:

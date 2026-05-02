@@ -119,7 +119,7 @@ class TestKoreanL1Patterns:
         assert patterns
         p = patterns[0]
         assert p.tip_ko  # non-empty Korean tip
-        assert p.drill   # non-empty drill list
+        assert p.drill  # non-empty drill list
 
     def test_no_patterns_when_matching(self):
         patterns = self._run("the cat sat", "the cat sat")
@@ -129,8 +129,7 @@ class TestKoreanL1Patterns:
 class TestSuggestDrills:
     def test_patterns_drive_drills(self):
         aligned = align_texts("I think so", "I sink so")
-        diffs = [diff_word(a.ref, a.hyp) for a in aligned
-                 if a.op in ("sub", "del") and a.ref]
+        diffs = [diff_word(a.ref, a.hyp) for a in aligned if a.op in ("sub", "del") and a.ref]
         diffs = [d for d in diffs if d]
         patterns = detect_patterns(aligned, diffs, None)
         drills = suggest_drills(patterns, diffs)

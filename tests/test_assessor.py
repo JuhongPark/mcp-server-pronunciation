@@ -59,10 +59,7 @@ class TestScoring:
 
     def test_wpm_caveat_long_clip(self):
         # 30 words of 0.4s each = 12s speech -> no caveat.
-        words = [
-            WordResult(f"w{i}", i * 0.4, i * 0.4 + 0.4, 0.9)
-            for i in range(30)
-        ]
+        words = [WordResult(f"w{i}", i * 0.4, i * 0.4 + 0.4, 0.9) for i in range(30)]
         r = _make_result(" ".join(f"w{i}" for i in range(30)), words=words)
         assert r.wpm_caveat is None
 

@@ -33,19 +33,50 @@ logger = logging.getLogger(__name__)
 
 _ARPA_TO_IPA: dict[str, str] = {
     # vowels
-    "AA": "ɑ", "AE": "æ", "AH": "ʌ", "AO": "ɔ", "AW": "aʊ", "AY": "aɪ",
-    "EH": "ɛ", "ER": "ɜr", "EY": "eɪ", "IH": "ɪ", "IY": "i", "OW": "oʊ",
-    "OY": "ɔɪ", "UH": "ʊ", "UW": "u",
+    "AA": "ɑ",
+    "AE": "æ",
+    "AH": "ʌ",
+    "AO": "ɔ",
+    "AW": "aʊ",
+    "AY": "aɪ",
+    "EH": "ɛ",
+    "ER": "ɜr",
+    "EY": "eɪ",
+    "IH": "ɪ",
+    "IY": "i",
+    "OW": "oʊ",
+    "OY": "ɔɪ",
+    "UH": "ʊ",
+    "UW": "u",
     # consonants
-    "B": "b", "CH": "tʃ", "D": "d", "DH": "ð", "F": "f", "G": "ɡ",
-    "HH": "h", "JH": "dʒ", "K": "k", "L": "l", "M": "m", "N": "n",
-    "NG": "ŋ", "P": "p", "R": "r", "S": "s", "SH": "ʃ", "T": "t",
-    "TH": "θ", "V": "v", "W": "w", "Y": "j", "Z": "z", "ZH": "ʒ",
+    "B": "b",
+    "CH": "tʃ",
+    "D": "d",
+    "DH": "ð",
+    "F": "f",
+    "G": "ɡ",
+    "HH": "h",
+    "JH": "dʒ",
+    "K": "k",
+    "L": "l",
+    "M": "m",
+    "N": "n",
+    "NG": "ŋ",
+    "P": "p",
+    "R": "r",
+    "S": "s",
+    "SH": "ʃ",
+    "T": "t",
+    "TH": "θ",
+    "V": "v",
+    "W": "w",
+    "Y": "j",
+    "Z": "z",
+    "ZH": "ʒ",
 }
 
 # Phoneme class membership for pattern detection.
-_VOWELS = {"AA", "AE", "AH", "AO", "AW", "AY", "EH", "ER", "EY", "IH", "IY",
-           "OW", "OY", "UH", "UW"}
+_VOWELS = {"AA", "AE", "AH", "AO", "AW", "AY", "EH", "ER", "EY", "IH", "IY", "OW", "OY", "UH", "UW"}
 _STOPS = {"P", "T", "K", "B", "D", "G"}
 _OBSTRUENT_CLUSTER_HEADS = {"S"}  # "sp", "st", "sk" onsets
 
@@ -159,14 +190,14 @@ def phonemes_for(word: str) -> list[str]:
 class PhonemeDiff:
     """Per-word phoneme-level comparison of what was expected vs produced."""
 
-    word: str                       # reference word (display)
-    expected_arpa: list[str]        # reference ARPAbet w/ stress
-    produced_arpa: list[str]        # hypothesis ARPAbet w/ stress
-    expected_ipa: str               # "/rɪsks/"
-    produced_ipa: str               # "/rɪs/"
-    weak_phonemes: list[str]        # ARPAbet tokens that were changed/dropped
-    weak_phonemes_ipa: str          # IPA fragment of weak phonemes
-    confidence: float               # 0.0-1.0 (1 - edit_distance/max_len)
+    word: str  # reference word (display)
+    expected_arpa: list[str]  # reference ARPAbet w/ stress
+    produced_arpa: list[str]  # hypothesis ARPAbet w/ stress
+    expected_ipa: str  # "/rɪsks/"
+    produced_ipa: str  # "/rɪs/"
+    weak_phonemes: list[str]  # ARPAbet tokens that were changed/dropped
+    weak_phonemes_ipa: str  # IPA fragment of weak phonemes
+    confidence: float  # 0.0-1.0 (1 - edit_distance/max_len)
 
 
 def _phoneme_edit(exp: list[str], prod: list[str]) -> tuple[int, list[str]]:
@@ -246,11 +277,11 @@ def diff_word(ref_word: str, hyp_word: str | None) -> PhonemeDiff | None:
 class KoreanL1Pattern:
     """One detected Korean-L1 confusion instance."""
 
-    pattern: str                 # machine key: "r_l_swap", "final_cluster_deletion", ...
-    label: str                   # human label: "R/L swap"
-    examples: list[str]          # ["word @ 2.1s", ...]
-    tip_ko: str                  # Korean-language tip
-    drill: list[str]             # minimal pair drills
+    pattern: str  # machine key: "r_l_swap", "final_cluster_deletion", ...
+    label: str  # human label: "R/L swap"
+    examples: list[str]  # ["word @ 2.1s", ...]
+    tip_ko: str  # Korean-language tip
+    drill: list[str]  # minimal pair drills
     count: int = 1
 
 
@@ -462,9 +493,12 @@ def detect_patterns(
     # that final stop (vowel, different consonant, or missing entirely).
     # Skip if this word already triggered final_cluster_deletion — that
     # pattern is more specific.
-    cluster_hit_words = {ex.split(" @", 1)[0].lower()
-                         for ex in buckets.get("final_cluster_deletion",
-                                                KoreanL1Pattern("", "", [], "", [], 0)).examples}
+    cluster_hit_words = {
+        ex.split(" @", 1)[0].lower()
+        for ex in buckets.get(
+            "final_cluster_deletion", KoreanL1Pattern("", "", [], "", [], 0)
+        ).examples
+    }
     for d in phoneme_diffs:
         if not d.expected_arpa or not d.produced_arpa:
             continue
@@ -497,7 +531,7 @@ def detect_patterns(
 class Drill:
     """A minimal-pair drill suggestion tied to a specific weakness."""
 
-    reason: str             # "final cluster /sks/" or "/r/ at word start"
+    reason: str  # "final cluster /sks/" or "/r/ at word start"
     minimal_pairs: list[str]
 
 
