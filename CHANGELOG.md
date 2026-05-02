@@ -56,7 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New mandatory: `cmudict>=1.0`, `g2p-en>=2.1`, `librosa>=0.10,<1`.
 - New optional (`[phoneme]`): `torch>=2.2`, `torchaudio>=2.2`.
 
-## [0.2.0] — Unreleased
+## [0.2.0] — 2026-04-12
 
 ### Changed
 
@@ -99,7 +99,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Recording errors on Linux now point users at the correct `libportaudio2`
   package name instead of suggesting `pip install sounddevice`.
 
-## [0.1.0] — Initial release
+## [0.1.0] — 2026-04-11
 
 - Whisper-based pronunciation assessment via `faster-whisper` word-level timestamps
 - Tools: `record`, `assess`, `practice`, `retry`, `quick_practice`, `suggest_sentence`, `check_mic`
