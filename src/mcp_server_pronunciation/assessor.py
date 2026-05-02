@@ -101,8 +101,8 @@ class AssessmentResult:
     transcript: str
     reference_text: str | None
     words: list[WordResult] = field(default_factory=list)
-    duration_sec: float = 0.0             # total audio duration (incl. silence)
-    speech_duration_sec: float = 0.0      # sum of word spans (speech only)
+    duration_sec: float = 0.0  # total audio duration (incl. silence)
+    speech_duration_sec: float = 0.0  # sum of word spans (speech only)
     language: str = "en"
     language_prob: float = 0.0
 
@@ -253,10 +253,7 @@ class AssessmentResult:
                 ],
                 "unavailable": self.prosody.unavailable,
             },
-            "drills": [
-                {"reason": d.reason, "minimal_pairs": d.minimal_pairs}
-                for d in self.drills
-            ],
+            "drills": [{"reason": d.reason, "minimal_pairs": d.minimal_pairs} for d in self.drills],
         }
 
     # ---- markdown rendering ----------------------------------------
@@ -280,8 +277,7 @@ class AssessmentResult:
 
         wpm = self.words_per_minute
         lines.append(
-            f"**Clarity:** {self.clarity_pct}% | "
-            f"**Speed:** {wpm:.0f} WPM ({_speed_label(wpm)})"
+            f"**Clarity:** {self.clarity_pct}% | **Speed:** {wpm:.0f} WPM ({_speed_label(wpm)})"
         )
         if self.wpm_caveat:
             lines.append(f"*Note: WPM {self.wpm_caveat}.*")
@@ -303,9 +299,9 @@ class AssessmentResult:
                     hyp = a.hyp or "—"
                     marker = {
                         "match": "✓",
-                        "sub":  "≠",
-                        "ins":  "+",
-                        "del":  "−",
+                        "sub": "≠",
+                        "ins": "+",
+                        "del": "−",
                     }[a.op]
                     conf_cell = ""
                     if self.forced_alignment_used:
@@ -314,14 +310,13 @@ class AssessmentResult:
                     row = f"| {ref} | {hyp} | {marker} {a.op} |{conf_cell}"
                     lines.append(row)
                     if a.note:
-                        lines.append(f"|  |  | *{a.note}* |"
-                                     + (" |" if self.forced_alignment_used else ""))
+                        lines.append(
+                            f"|  |  | *{a.note}* |" + (" |" if self.forced_alignment_used else "")
+                        )
                 lines.append("")
 
         # Phoneme issues (skip fully-deleted words — already shown in alignment).
-        phoneme_hits = [
-            d for d in self.phoneme_diffs if d.weak_phonemes and d.produced_arpa
-        ]
+        phoneme_hits = [d for d in self.phoneme_diffs if d.weak_phonemes and d.produced_arpa]
         if phoneme_hits:
             lines.append("### Phoneme issues")
             for d in phoneme_hits:
@@ -421,9 +416,7 @@ class AssessmentResult:
             subs = [a for a in self.aligned if a.op == "sub"][:2]
             dels = [a for a in self.aligned if a.op == "del"][:1]
             for a in subs:
-                feedback.append(
-                    f'**Pronunciation:** *"{a.ref}"* → heard *"{a.hyp}"*'
-                )
+                feedback.append(f'**Pronunciation:** *"{a.ref}"* → heard *"{a.hyp}"*')
             for a in dels:
                 feedback.append(f'**Pronunciation:** *"{a.ref}"* was skipped')
 
@@ -442,7 +435,9 @@ class AssessmentResult:
             feedback.append(f"**{p.label}**: {p.tip_ko}")
 
         if self.prosody.final_rise_on_declarative:
-            feedback.append("**Intonation:** statement ended with rising pitch (sounded like a question)")
+            feedback.append(
+                "**Intonation:** statement ended with rising pitch (sounded like a question)"
+            )
 
         if self.get_pauses(1.2):
             count = len(self.get_pauses(1.2))
@@ -624,8 +619,8 @@ class PronunciationAssessor:
 
     # Forced-alignment confidence thresholds. Calibrated on the five
     # regression clips; tune if they miscategorize many cases.
-    _FA_MATCH_THRESHOLD = 0.50    # >= this -> user produced the word
-    _FA_WEAK_THRESHOLD = 0.25     # between WEAK and MATCH -> unclear production
+    _FA_MATCH_THRESHOLD = 0.50  # >= this -> user produced the word
+    _FA_WEAK_THRESHOLD = 0.25  # between WEAK and MATCH -> unclear production
 
     def _run_reference_analysis(
         self,
@@ -729,8 +724,7 @@ class PronunciationAssessor:
         # for now we use Whisper's word timings, which are adequate for the
         # coarse pause + pitch checks we run.
         from_whisper = [
-            TimedWord(word=w.word.strip(" ,.?!"), start=w.start, end=w.end)
-            for w in r.words
+            TimedWord(word=w.word.strip(" ,.?!"), start=w.start, end=w.end) for w in r.words
         ]
 
         # Annotate clause boundaries from the reference text when available.

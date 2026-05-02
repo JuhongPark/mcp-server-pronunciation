@@ -14,7 +14,12 @@ class TestTokenize:
 
     def test_strips_punct(self):
         assert tokenize("The cat sat on the mat!") == [
-            "the", "cat", "sat", "on", "the", "mat",
+            "the",
+            "cat",
+            "sat",
+            "on",
+            "the",
+            "mat",
         ]
 
     def test_hyphen_splits(self):
@@ -43,10 +48,8 @@ class TestAlignWords:
         """Primary regression: a single dropped word in the middle of a
         sentence must report exactly one `del`, not a chain of phantom
         substitutions (the old SequenceMatcher-based behavior)."""
-        ref = ["the", "quick", "brown", "fox", "jumps", "over",
-               "the", "lazy", "dog"]
-        hyp = ["the", "quick", "brown", "fox", "over",
-               "the", "lazy", "dog"]
+        ref = ["the", "quick", "brown", "fox", "jumps", "over", "the", "lazy", "dog"]
+        hyp = ["the", "quick", "brown", "fox", "over", "the", "lazy", "dog"]
         a = align_words(ref, hyp)
         s = summarize(a)
         assert s["del"] == 1

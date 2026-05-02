@@ -35,11 +35,11 @@ logger = logging.getLogger(__name__)
 class ForcedWord:
     """One reference word aligned to audio."""
 
-    word: str                     # reference token (lowercased, alphanum only)
-    ref_index: int                # position in the reference token list
-    start: float                  # seconds
-    end: float                    # seconds
-    confidence: float             # mean CTC posterior across the span, 0..1
+    word: str  # reference token (lowercased, alphanum only)
+    ref_index: int  # position in the reference token list
+    start: float  # seconds
+    end: float  # seconds
+    confidence: float  # mean CTC posterior across the span, 0..1
     # Per-character details kept for optional phoneme-span lookup.
     char_spans: list[tuple[str, float, float, float]] = field(default_factory=list)
 
@@ -57,8 +57,8 @@ class ForcedAlignment:
 # ---------------------------------------------------------------------------
 
 
-_BUNDLE = None           # torchaudio.pipelines bundle
-_MODEL = None            # wav2vec2 model (quantized)
+_BUNDLE = None  # torchaudio.pipelines bundle
+_MODEL = None  # wav2vec2 model (quantized)
 _LABELS: tuple[str, ...] | None = None
 _BLANK_IDX: int | None = None
 
@@ -90,9 +90,7 @@ def _ensure_model() -> bool:
         # ~380MB (fp32) to ~95MB on CPU, ~3x faster inference. Accuracy loss is
         # negligible for forced alignment where we care about argmax posteriors.
         try:
-            model = torch.quantization.quantize_dynamic(
-                model, {torch.nn.Linear}, dtype=torch.qint8
-            )
+            model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
         except Exception as e:  # pragma: no cover — best-effort
             logger.warning("wav2vec2 quantization failed, using fp32: %s", e)
         model.eval()
@@ -265,8 +263,11 @@ def align(audio_path: Path, reference_text: str) -> ForcedAlignment | None:
         # end_in_seq); find frames whose path is in that range.
         out_words: list[ForcedWord] = []
         for ref_idx, (tok, s_in_seq, e_in_seq) in enumerate(word_spans):
-            frames = [t for t in range(T) if path[t] is not None and path[t] != -1
-                      and s_in_seq <= path[t] < e_in_seq]
+            frames = [
+                t
+                for t in range(T)
+                if path[t] is not None and path[t] != -1 and s_in_seq <= path[t] < e_in_seq
+            ]
             if not frames:
                 # No frames aligned to this word -> very low confidence, zero span.
                 out_words.append(
@@ -282,9 +283,7 @@ def align(audio_path: Path, reference_text: str) -> ForcedAlignment | None:
             fstart, fend = min(frames), max(frames) + 1
             # Confidence: mean posterior (not log-posterior) across frames on
             # the path tokens within this word.
-            posteriors = np.exp(
-                [log_probs[t, seq[path[t]]] for t in frames]
-            )
+            posteriors = np.exp([log_probs[t, seq[path[t]]] for t in frames])
             conf = float(np.mean(posteriors))
             out_words.append(
                 ForcedWord(

@@ -27,8 +27,8 @@ class StressError:
     """A word whose measured stress peak doesn't match the dictionary primary-stress syllable."""
 
     word: str
-    expected_stress_syllable: int      # 0-based index of the primary-stress syllable
-    observed_stress_syllable: int      # 0-based index of the syllable with highest pitch+intensity
+    expected_stress_syllable: int  # 0-based index of the primary-stress syllable
+    observed_stress_syllable: int  # 0-based index of the syllable with highest pitch+intensity
     start: float
     end: float
 
@@ -37,8 +37,8 @@ class StressError:
 class IntraClausePause:
     """A pause ≥ threshold between two words that don't sit on a clause boundary."""
 
-    before: str       # word before the pause
-    after: str        # word after the pause
+    before: str  # word before the pause
+    after: str  # word after the pause
     start: float
     end: float
     duration: float
@@ -50,9 +50,9 @@ class ProsodyResult:
 
     wrong_word_stress: list[StressError] = field(default_factory=list)
     final_rise_on_declarative: bool = False
-    final_pitch_slope: float = 0.0       # semitones/sec over last ~500ms; >2 counts as rise
+    final_pitch_slope: float = 0.0  # semitones/sec over last ~500ms; >2 counts as rise
     intra_clause_pauses: list[IntraClausePause] = field(default_factory=list)
-    unavailable: bool = False            # True if librosa not available / audio couldn't be read
+    unavailable: bool = False  # True if librosa not available / audio couldn't be read
 
 
 # ---------------------------------------------------------------------------
@@ -239,7 +239,9 @@ def _find_stress_errors(
             _np.linspace(0, 1, len(rms)),
             rms,
         )
-        rms_norm = (rms_resamp - rms_resamp.min()) / max(1e-9, (rms_resamp.max() - rms_resamp.min()))
+        rms_norm = (rms_resamp - rms_resamp.min()) / max(
+            1e-9, (rms_resamp.max() - rms_resamp.min())
+        )
         # Combined energy per frame; nan-safe.
         combined = _np.where(_np.isnan(f0_norm), rms_norm * 0.5, f0_norm * 0.7 + rms_norm * 0.3)
 
