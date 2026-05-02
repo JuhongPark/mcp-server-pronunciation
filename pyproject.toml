@@ -54,8 +54,6 @@ phoneme = [
 dev = [
     "pytest>=8.0",
     "ruff>=0.4",
-    "torch>=2.2",
-    "torchaudio>=2.2",
 ]
 
 [project.scripts]
