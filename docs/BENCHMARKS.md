@@ -44,9 +44,29 @@ The report currently records:
 - score-field coverage
 - a small preview of parsed items
 
+## Score Report Helper
+
+The score-report helper compares human scores and predicted scores from a JSONL
+file. It is useful before a full audio benchmark runner exists because it lets
+development compare scoring changes with a stable prediction export.
+
+Example:
+
+```bash
+mcp-server-pronunciation bench score-report \
+  --predictions benchmark/results/speechocean_predictions.jsonl \
+  --gold-field human.utt_total \
+  --pred-field predicted.utt_total \
+  --dataset speechocean762 \
+  --output benchmark/results/speechocean_score_report.json
+```
+
+The output includes count, MAE, RMSE, Pearson correlation, and Spearman
+correlation. Correlations are `null` when there are too few samples or either
+side has zero variance.
+
 ## Data Policy
 
 Do not commit benchmark datasets, downloaded audio, model weights, or generated
 large reports. Keep local benchmark data under an ignored directory such as
 `benchmark/data/` or outside the repository.
-
