@@ -284,6 +284,13 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
+To work on the optional wav2vec2 forced-alignment path, install the phoneme
+extra as well:
+
+```bash
+uv sync --extra dev --extra phoneme
+```
+
 ## Support
 
 Issues: https://github.com/JuhongPark/mcp-server-pronunciation/issues
