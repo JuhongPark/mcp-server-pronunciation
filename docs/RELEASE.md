@@ -5,6 +5,10 @@ Use this checklist before publishing a package or registry update.
 ## Pre-Release
 
 - Confirm the worktree is clean before starting release steps.
+- For public beta releases, confirm `README.md`, `DISCLAIMER.md`, and release
+  notes clearly state that the project is an early beta and may contain bugs,
+  runtime errors, inaccurate transcripts, inaccurate pronunciation feedback, and
+  platform-specific recording issues.
 - Run tests and lint:
 
 ```bash
@@ -29,6 +33,8 @@ uv run pytest -v
 
 - Check that `CHANGELOG.md` has a dated entry for the release.
 - Confirm `server.json` points at the intended package version.
+- For a beta release, use a PEP 440 beta version such as `0.3.0b1` and a
+  matching tag such as `v0.3.0b1`.
 - Run `mcp-server-pronunciation doctor` in a fresh environment when possible.
 - Scan changed files for credentials, private data, and bundled datasets.
 
@@ -45,6 +51,19 @@ Confirm the wheel contains `record_mic.ps1`.
 Publishing is handled by the GitHub Actions release workflow through PyPI
 Trusted Publishers. Push a version tag only after the pre-release checks pass.
 
+For a public beta, publish a GitHub pre-release and use the beta release notes:
+
+```bash
+git tag v0.3.0b1
+git push origin v0.3.0b1
+gh release create v0.3.0b1 \
+  --title "v0.3.0b1 (public beta)" \
+  --notes-file docs/releases/v0.3.0b1.md \
+  --prerelease
+```
+
+For a stable release:
+
 ```bash
 git tag vX.Y.Z
 git push origin vX.Y.Z
@@ -59,4 +78,3 @@ git push origin vX.Y.Z
   `server.json`.
 - Publish benchmark summaries only as reports. Do not upload third-party
   benchmark datasets to this repository.
-
