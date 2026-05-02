@@ -255,6 +255,29 @@ def main(argv: list[str] | None = None) -> int:
         help="Model size (default: $MCP_PRONUNCIATION_MODEL or base.en)",
     )
 
+    bench = sub.add_parser("bench", help="Run benchmark helpers.")
+    bench_sub = bench.add_subparsers(dest="benchmark")
+    speechocean = bench_sub.add_parser(
+        "speechocean",
+        help="Parse a Speechocean762 JSONL manifest and write an adapter report.",
+    )
+    speechocean.add_argument(
+        "--manifest",
+        required=True,
+        help="Path to a JSONL manifest exported from Speechocean762 metadata.",
+    )
+    speechocean.add_argument(
+        "--output",
+        default="benchmark/results/speechocean_adapter.json",
+        help="Where to write the JSON report.",
+    )
+    speechocean.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of manifest rows to parse.",
+    )
+
     sub.add_parser("serve", help="Run the MCP server (default).")
 
     args = parser.parse_args(argv)
@@ -263,6 +286,20 @@ def main(argv: list[str] | None = None) -> int:
         return doctor()
     if args.command == "pull-model":
         return pull_model(args.size)
+    if args.command == "bench":
+        if args.benchmark == "speechocean":
+            from .benchmarks import load_speechocean_jsonl, make_adapter_report, write_report
+
+            items = load_speechocean_jsonl(Path(args.manifest), limit=args.limit)
+            report = make_adapter_report("speechocean762", items)
+            output_path = Path(args.output)
+            write_report(report, output_path)
+            print(
+                f"Wrote {report.status} report for {len(items)} Speechocean762 items to {output_path}",
+                flush=True,
+            )
+            return 0
+        parser.error("bench requires a benchmark name, such as `speechocean`")
 
     # Default: run the MCP server (also matches `serve`).
     from .server import run
