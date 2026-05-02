@@ -265,6 +265,19 @@ Subsequent runs reuse the cached weights. If startup still feels slow, try `MCP_
 
 Claude Desktop launches MCP servers from a GUI-only environment without `~/.local/bin` on PATH. Use the absolute path to `uvx` in your config (`/Users/YOU/.local/bin/uvx` or wherever `which uvx` reports).
 
+## Known Limitations
+
+- Pronunciation scores are coaching signals, not standardized-test, clinical, or native-speaker-equivalence judgments.
+- Whisper can still mishear rare names, domain terms, short clips, quiet audio, or heavily accented speech. The optional `[phoneme]` extra reduces some reference-sentence false positives but does not eliminate them.
+- Prosody feedback is heuristic. Pitch tracking can be unreliable with noisy audio, very short utterances, vocal fry, overlapping speech, or clipped recordings.
+- Korean-L1 pattern detection is intentionally rule-based. It can miss errors, over-trigger on ASR mistakes, and should be treated as a targeted practice aid.
+- First-time setup may download model or pronunciation resources. Run `doctor` and `pull-model` before relying on the server in a live session.
+- Temporary WAV recordings are written under the system temp directory so that the last recording can be assessed. Treat local temp storage as sensitive if you practice private content.
+
+## Benchmark Status
+
+This project is moving toward benchmark-backed scoring. Planned public benchmark work is tracked in [ROADMAP.md](ROADMAP.md). The primary candidate is Speechocean762 because it has a permissive CC BY 4.0 license and multi-level expert pronunciation scores. L2-ARCTIC is useful for Korean-L1 and phone-error research checks, but its non-commercial license means it should remain optional and separate from default release claims.
+
 ## Privacy
 
 - All audio processing happens **locally** on your machine.
