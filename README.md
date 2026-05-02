@@ -2,6 +2,14 @@
 
 <!-- mcp-name: io.github.juhongpark/pronunciation -->
 
+> **Public beta notice**
+>
+> This project is an early beta and is still under active development. It may
+> contain bugs, runtime errors, inaccurate transcripts, inaccurate pronunciation
+> feedback, or platform-specific recording issues. Use it for experimentation
+> and language-learning practice only, and review outputs carefully before
+> relying on them. See [DISCLAIMER.md](DISCLAIMER.md).
+
 An MCP (Model Context Protocol) server that lets you **talk to Claude by voice while getting English pronunciation, grammar, and fluency feedback** in the same turn. Use it for casual voice chat with light coaching, or switch to drill mode when you want to practice a specific sentence.
 
 Built for Claude Desktop, Claude Code, and any other MCP client. Everything runs locally — audio is captured with your mic, transcribed by [`faster-whisper`](https://github.com/SYSTRAN/faster-whisper) on-device, and never leaves your machine.
@@ -32,6 +40,28 @@ Voice MCP servers today treat speech as a typing replacement. English tutor MCP 
 - MCP spec: targets `2025-06-18` via the official Python SDK (`mcp>=1.2`)
 
 ## Installation
+
+### Public beta
+
+Beta releases are pre-releases. Install the current beta explicitly:
+
+```bash
+uvx mcp-server-pronunciation@0.3.0b1
+```
+
+For pip users:
+
+```bash
+pip install --pre mcp-server-pronunciation
+```
+
+Run `doctor` before relying on the beta in a live session:
+
+```bash
+mcp-server-pronunciation doctor
+```
+
+### General install commands
 
 ```bash
 # Recommended: uvx (no global install, cached between runs)
@@ -281,6 +311,8 @@ Claude Desktop launches MCP servers from a GUI-only environment without `~/.loca
 
 ## Known Limitations
 
+- This is a public beta. Bugs, runtime errors, inaccurate feedback, and
+  platform-specific recording issues are expected.
 - Pronunciation scores are coaching signals, not standardized-test, clinical, or native-speaker-equivalence judgments.
 - Whisper can still mishear rare names, domain terms, short clips, quiet audio, or heavily accented speech. The optional `[phoneme]` extra reduces some reference-sentence false positives but does not eliminate them.
 - Prosody feedback is heuristic. Pitch tracking can be unreliable with noisy audio, very short utterances, vocal fry, overlapping speech, or clipped recordings.
