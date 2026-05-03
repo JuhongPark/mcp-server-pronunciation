@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.juhongpark/pronunciation",
   "title": "Pronunciation & Voice Coach",
-  "description": "MCP server for voice conversation with Claude plus English pronunciation, grammar, and fluency feedback — runs locally with faster-whisper.",
+  "description": "Local MCP voice coach with English pronunciation, grammar, and fluency feedback.",
   "version": "0.3.0b1",
   "repository": {
     "url": "https://github.com/JuhongPark/mcp-server-pronunciation",
