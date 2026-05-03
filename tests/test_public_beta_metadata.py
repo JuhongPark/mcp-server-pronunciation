@@ -78,5 +78,7 @@ def test_dockerfile_disables_model_preload_for_directory_inspection():
 
     assert "MCP_PRONUNCIATION_PRELOAD=0" in dockerfile
     assert "libportaudio2" in dockerfile
+    assert "--no-deps" in dockerfile
+    assert '"mcp[cli]>=1.2,<2"' in dockerfile
     assert 'ENTRYPOINT ["mcp-server-pronunciation"]' in dockerfile
     assert 'CMD ["serve"]' in dockerfile

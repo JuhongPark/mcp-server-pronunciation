@@ -14,7 +14,10 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY . .
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir \
+        "mcp[cli]>=1.2,<2" \
+        "pydantic>=2,<3" \
+    && pip install --no-cache-dir --no-deps .
 
 ENTRYPOINT ["mcp-server-pronunciation"]
 CMD ["serve"]
