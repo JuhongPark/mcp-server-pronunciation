@@ -80,6 +80,9 @@ The release workflow publishes `server.json` to the MCP Registry after the
 PyPI publish job succeeds. It uses GitHub OIDC authentication and does not need
 a registry token secret.
 
+If PyPI publish succeeds but MCP Registry publish fails, rerun the manual
+`Publish MCP Registry` workflow from GitHub Actions.
+
 Verify registry publication with:
 
 ```bash
@@ -102,4 +105,3 @@ Official MCP Registry docs:
 4. Wait for GitHub Actions to publish to PyPI and then the MCP Registry.
 5. Create or verify the GitHub pre-release.
 6. Verify PyPI and MCP Registry URLs.
-
