@@ -10,7 +10,7 @@ assessment product.
 The public beta should use standard packaging and release signals:
 
 - Python package versions should follow PEP 440. A beta pre-release should use
-  a version such as `0.3.0b1`.
+  a version such as `0.3.0b2`.
 - PyPI Trove classifiers should mark maturity with
   `Development Status :: 4 - Beta`.
 - GitHub Releases should be marked as pre-releases when the release is not
@@ -59,14 +59,14 @@ The beta notice should appear in:
 
 ## Versioning
 
-Use `0.3.0b1` for the first public beta because the current unreleased work is
+Use `0.3.0b2` for the current public beta because the current unreleased work is
 already staged as the `0.3.0` line. Keep these fields aligned:
 
 - `pyproject.toml` project version.
 - `server.json` top-level version.
 - `server.json` PyPI package version.
 - `CHANGELOG.md` release heading.
-- Git tag: `v0.3.0b1`.
+- Git tag: `v0.3.0b2`.
 
 For a final stable release of the same feature line, use `0.3.0`.
 
@@ -86,11 +86,11 @@ For a final stable release of the same feature line, use `0.3.0`.
 9. When ready to publish, create a pre-release tag and GitHub Release:
 
 ```bash
-git tag v0.3.0b1
-git push origin v0.3.0b1
-gh release create v0.3.0b1 \
-  --title "v0.3.0b1 (public beta)" \
-  --notes-file docs/releases/v0.3.0b1.md \
+git tag v0.3.0b2
+git push origin v0.3.0b2
+gh release create v0.3.0b2 \
+  --title "v0.3.0b2 (public beta)" \
+  --notes-file docs/releases/v0.3.0b2.md \
   --prerelease
 ```
 

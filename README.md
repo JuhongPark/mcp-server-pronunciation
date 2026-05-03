@@ -1,6 +1,6 @@
 # mcp-server-pronunciation
 
-<!-- mcp-name: io.github.juhongpark/pronunciation -->
+<!-- mcp-name: io.github.JuhongPark/pronunciation -->
 
 > **Public beta notice**
 >
@@ -14,7 +14,7 @@ An MCP (Model Context Protocol) server that lets you **talk to Claude by voice w
 
 Built for Claude Desktop, Claude Code, and any other MCP client. Everything runs locally — audio is captured with your mic, transcribed by [`faster-whisper`](https://github.com/SYSTRAN/faster-whisper) on-device, and never leaves your machine.
 
-`mcp-name: io.github.juhongpark/pronunciation`
+`mcp-name: io.github.JuhongPark/pronunciation`
 
 ## Why
 
@@ -46,7 +46,7 @@ Voice MCP servers today treat speech as a typing replacement. English tutor MCP 
 Beta releases are pre-releases. Install the current beta explicitly:
 
 ```bash
-uvx mcp-server-pronunciation@0.3.0b1
+uvx mcp-server-pronunciation@0.3.0b2
 ```
 
 For pip users:

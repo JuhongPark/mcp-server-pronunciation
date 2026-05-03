@@ -963,7 +963,7 @@ cli = [
 
 [[package]]
 name = "mcp-server-pronunciation"
-version = "0.3.0b1"
+version = "0.3.0b2"
 source = { editable = "." }
 dependencies = [
     { name = "cmudict" },
