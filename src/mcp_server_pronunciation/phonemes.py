@@ -1,4 +1,4 @@
-"""Phoneme-level analysis: CMU dict lookup, IPA rendering, Korean-L1 patterns.
+"""Phoneme-level analysis: CMU dict lookup, IPA rendering, learner-profile hints.
 
 Given a word-level alignment, this module answers "which *sound* failed?" by
 comparing the phoneme sequence of each reference word to the phoneme sequence
@@ -6,10 +6,10 @@ of its hypothesis counterpart. Phoneme sequences come from CMUdict (ARPAbet),
 with `g2p_en`'s neural G2P as a fallback for OOV words (proper nouns, domain
 terms). Both outputs are mapped to IPA for display.
 
-Korean-L1 pattern detection runs over the aligned phonemes and the raw
-alignment ops to surface the canonical L1→L2 confusions: th→s/d, r/l, f→p,
-v→b, z→dʒ, final cluster deletion, intrusive onset vowel, final stop
-unrelease, schwa→full-vowel, dark-l confusion, article omission.
+The bundled learner-profile rules currently cover common Korean-L1 English
+patterns: th→s/d, r/l, f→p, v→b, z→dʒ, final cluster deletion, intrusive onset
+vowel, final stop unrelease, schwa→full-vowel, dark-l confusion, and article
+omission.
 """
 
 from __future__ import annotations
@@ -269,13 +269,13 @@ def diff_word(ref_word: str, hyp_word: str | None) -> PhonemeDiff | None:
 
 
 # ---------------------------------------------------------------------------
-# Korean-L1 pattern detection
+# Bundled learner-profile pattern detection
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class KoreanL1Pattern:
-    """One detected Korean-L1 confusion instance."""
+    """One detected instance from the bundled Korean-L1 learner profile."""
 
     pattern: str  # machine key: "r_l_swap", "final_cluster_deletion", ...
     label: str  # human label: "R/L swap"
@@ -356,7 +356,7 @@ _PATTERN_META: dict[str, tuple[str, str, list[str]]] = {
 }
 
 
-# Canonical Korean-L1 substitutions at the phoneme level: (expected, produced)
+# Canonical bundled learner-profile substitutions: (expected, produced)
 _PHONEME_SUB_PATTERNS: dict[tuple[str, str], str] = {
     ("R", "L"): "r_l_swap",
     ("L", "R"): "r_l_swap",
@@ -378,7 +378,7 @@ def detect_patterns(
     phoneme_diffs: list[PhonemeDiff],
     word_timestamps: dict[int, float] | None = None,
 ) -> list[KoreanL1Pattern]:
-    """Scan alignment + phoneme diffs for Korean-L1 confusions.
+    """Scan alignment + phoneme diffs for bundled learner-profile hints.
 
     word_timestamps: optional map from ref_index -> start-time (seconds). When
     provided, examples are rendered as "word @ 2.1s".

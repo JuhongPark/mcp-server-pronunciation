@@ -55,7 +55,8 @@ Coverage:
 
 - Text tokenization and Needleman-Wunsch word alignment.
 - CMUdict and G2P phoneme lookup behavior.
-- Korean-L1 rule detection and drill selection.
+- Learner-profile rule detection and drill selection, including the currently
+  bundled Korean-L1 rules.
 - Assessment result scoring and report rendering.
 - Benchmark manifest parsing and metric computation.
 - CLI command parsing for benchmark reports.
@@ -148,7 +149,8 @@ subset.
 Use:
 
 - Phone-level precision, recall, F1, false alarm rate, and miss rate.
-- Korean speaker subset review for rule-pack behavior.
+- L1 subset review for rule-pack behavior, including Korean speakers when
+  evaluating the bundled Korean-L1 profile.
 - Forced-alignment robustness checks.
 
 Constraint: the license is non-commercial. Keep it optional, local-only, and
@@ -212,4 +214,3 @@ This cycle implements the foundation that can run without external data:
 
 Next benchmark work should add full scoring runs over a local Speechocean762
 manifest and then a research-only L2-ARCTIC adapter.
-

@@ -339,9 +339,9 @@ def assess(reference_text: str | None = None, audio_path: str | None = None) -> 
         against the reference directly.
       - Surfaces per-word phoneme-level feedback (expected vs produced IPA,
         weak phonemes) from CMUdict.
-      - Detects common Korean-L1 pronunciation patterns (r/l, th→s, final
-        cluster deletion, intrusive onset vowel, etc.) with Korean-language
-        tips and minimal-pair drills.
+      - Surfaces learner-profile pronunciation hints and drills. The bundled
+        rule pack currently includes Korean-L1 patterns such as r/l, th→s,
+        final cluster deletion, and intrusive onset vowel.
       - Adds prosody notes: word-stress placement, sentence-final rising
         intonation on declaratives, intra-clause hesitation pauses.
 

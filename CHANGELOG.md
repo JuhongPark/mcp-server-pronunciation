@@ -4,9 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Final releases use semantic versioning, and Python pre-releases use PEP 440
-spelling such as `0.3.0b2`.
+spelling such as `0.3.0b3`.
 
-## [0.3.0b2] — Unreleased
+## [0.3.0b3] — 2026-05-03
+
+### Changed
+
+- Public package metadata and README positioning now describe the project as a
+  general local English voice and pronunciation coach.
+- Korean-L1 support is now described as the currently included learner-profile
+  rule pack, with contributions for additional L1 profiles welcomed.
+- User-facing reports now label language-background rules as
+  "Learner-profile hints" instead of foregrounding one L1 group.
+
+### Fixed
+
+- PyPI package summary no longer foregrounds a single learner language
+  background.
+
+## [0.3.0b2] — 2026-05-03
 
 ### Beta Notice
 
@@ -39,11 +55,12 @@ spelling such as `0.3.0b2`.
   3. **Phoneme-level feedback** via CMUdict lookup + ARPAbet→IPA rendering.
      Each mismatched word reports its expected and produced IPA plus which
      phonemes were weak.
-  4. **Korean-L1 pattern detection**: `r_l_swap`, `f_to_p`, `v_to_b`,
-     `th_to_s`, `th_to_t`, `dh_to_d`, `z_to_j`, `final_cluster_deletion`,
+  4. **Learner-profile pattern hints**: the current rule pack includes
+     Korean-L1 patterns such as `r_l_swap`, `f_to_p`, `v_to_b`, `th_to_s`,
+     `th_to_t`, `dh_to_d`, `z_to_j`, `final_cluster_deletion`,
      `intrusive_onset_vowel`, `final_stop_unrelease`, `schwa_to_full_vowel`,
-     `dark_l_confusion`, `article_omission`. Each carries a Korean-language
-     tip and a minimal-pair drill list.
+     `dark_l_confusion`, `article_omission`. Each carries a Korean-language tip
+     and a minimal-pair drill list.
   5. **Prosody** via `librosa`: word-stress placement (CMUdict stress vs
      measured pitch+intensity peak), rising intonation on declaratives,
      intra-clause hesitation pauses.
@@ -58,8 +75,8 @@ spelling such as `0.3.0b2`.
 ### Added
 
 - `alignment.py`: Needleman-Wunsch word aligner with soft-equality tie-break.
-- `phonemes.py`: CMUdict lookup, ARPAbet→IPA, phoneme-sequence diff, Korean-L1
-  pattern rules, minimal-pair drill catalog.
+- `phonemes.py`: CMUdict lookup, ARPAbet→IPA, phoneme-sequence diff, bundled
+  learner-profile pattern rules, minimal-pair drill catalog.
 - `prosody.py`: librosa-based f0 + RMS feature extraction for prosody checks.
 - `forced_align.py`: optional wav2vec2-base-960h CTC forced alignment with
   Viterbi trellis. Dynamically int8-quantized (~95 MB RAM, ~1.5 s for a
@@ -118,7 +135,7 @@ spelling such as `0.3.0b2`.
 
 - Whisper-based pronunciation assessment via `faster-whisper` word-level timestamps
 - Tools: `record`, `assess`, `practice`, `retry`, `quick_practice`, `suggest_sentence`, `check_mic`
-- Korean-speaker substitution hints for common phonemes (`/θ/`, `/ð/`, `/f/`, `/v/`, `/r/`, `/l/`)
+- Initial learner-profile substitution hints for common phonemes (`/θ/`, `/ð/`, `/f/`, `/v/`, `/r/`, `/l/`)
 - VAD auto-stop recording
 - WSL2 support via PowerShell MCI
 - Background model pre-load

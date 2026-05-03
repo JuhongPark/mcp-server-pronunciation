@@ -23,7 +23,8 @@ Voice MCP servers today treat speech as a typing replacement. English tutor MCP 
 ## Features
 
 - **Voice conversation** with Claude. Speak, auto-stop on silence, Claude reads your transcript and responds.
-- **Phoneme-level drill feedback** (when a reference sentence is given): Needleman-Wunsch word alignment, per-word expected vs produced IPA, Korean-L1 pattern detection (r/l, th→s, final cluster deletion, intrusive onset vowel, …) with Korean-language tips and minimal-pair drills, and prosody checks (word stress, final-rise intonation, intra-clause pauses).
+- **Phoneme-level drill feedback** (when a reference sentence is given): Needleman-Wunsch word alignment, per-word expected vs produced IPA, learner-profile hints, minimal-pair drills, and prosody checks (word stress, final-rise intonation, intra-clause pauses).
+- **Extensible learner-profile support**: the current rule pack includes Korean-L1 pronunciation-pattern hints and Korean-language tips. Contributions for additional L1 profiles are welcome.
 - **Whisper-bias mitigation** via optional `[phoneme]` extra: wav2vec2 CTC forced alignment verifies whether the user actually produced each reference word, so rare proper nouns and domain-specific terms that Whisper rewrites toward more common alternatives no longer surface as mispronunciations.
 - **Inline English feedback in conversation**: pronunciation, grammar (common irregular-verb errors), and fluency (pace + long pauses).
 - **Drill mode** (`practice`, `quick_practice`, `retry`) for focused sentence practice.
@@ -46,7 +47,7 @@ Voice MCP servers today treat speech as a typing replacement. English tutor MCP 
 Beta releases are pre-releases. Install the current beta explicitly:
 
 ```bash
-uvx mcp-server-pronunciation@0.3.0b2
+uvx mcp-server-pronunciation@0.3.0b3
 ```
 
 For pip users:
@@ -184,7 +185,7 @@ Add to `.vscode/mcp.json` or your user settings:
 >
 > **You**: "Record me reading it."
 >
-> **Claude** (calls `practice` with that reference): *returns an alignment table (match / sub / ins / del) with per-word acoustic confidence when the `[phoneme]` extra is installed, phoneme-level issues with expected vs produced IPA, detected Korean-L1 patterns (e.g. /θ/→/s/) with Korean-language tips and minimal-pair drills, and prosody notes (word stress, final-rise intonation, intra-clause pauses).*
+> **Claude** (calls `practice` with that reference): *returns an alignment table (match / sub / ins / del) with per-word acoustic confidence when the `[phoneme]` extra is installed, phoneme-level issues with expected vs produced IPA, learner-profile hints when applicable, minimal-pair drills, and prosody notes (word stress, final-rise intonation, intra-clause pauses).*
 
 ### 3. Retry after feedback
 
@@ -202,7 +203,7 @@ Add to `.vscode/mcp.json` or your user settings:
 | `retry` | Re-record the last sentence the user was practicing. |
 | `suggest_sentence` | Return a practice sentence without recording. |
 | `record` | Record audio and save a WAV file (raw, no analysis). |
-| `assess` | Assess the last recording (or a specified WAV) without re-recording. When given a reference, runs the full drill pipeline (alignment, phoneme diff, Korean-L1 patterns, prosody). |
+| `assess` | Assess the last recording (or a specified WAV) without re-recording. When given a reference, runs the full drill pipeline (alignment, phoneme diff, learner-profile hints, prosody). |
 | `check_mic` | List available audio input devices. |
 
 ## Configuration
@@ -260,7 +261,7 @@ claude mcp add pronunciation -e MCP_PRONUNCIATION_MODEL=small.en -- uvx mcp-serv
 
 Installing `mcp-server-pronunciation[phoneme]` enables wav2vec2-based CTC forced alignment. It verifies which reference words the user acoustically produced, regardless of how Whisper's language-model-weighted decoder rewrote them — so rare proper nouns and domain terms no longer surface as false mispronunciations. On first run the extra downloads ~360 MB of weights into `~/.cache/torch/hub/` (override via `TORCH_HOME`). Inference is CPU-only by default and runtime-quantized to int8 (~95 MB RAM).
 
-Without the extra, `assess` / `practice` still run the full pipeline except for the forced-alignment step: you get Needleman-Wunsch word alignment against the Whisper hypothesis, CMUdict phoneme-sequence diff, Korean-L1 pattern detection, and prosody.
+Without the extra, `assess` / `practice` still run the full pipeline except for the forced-alignment step: you get Needleman-Wunsch word alignment against the Whisper hypothesis, CMUdict phoneme-sequence diff, learner-profile hints, and prosody.
 
 ## Platform Support
 
@@ -316,13 +317,13 @@ Claude Desktop launches MCP servers from a GUI-only environment without `~/.loca
 - Pronunciation scores are coaching signals, not standardized-test, clinical, or native-speaker-equivalence judgments.
 - Whisper can still mishear rare names, domain terms, short clips, quiet audio, or heavily accented speech. The optional `[phoneme]` extra reduces some reference-sentence false positives but does not eliminate them.
 - Prosody feedback is heuristic. Pitch tracking can be unreliable with noisy audio, very short utterances, vocal fry, overlapping speech, or clipped recordings.
-- Korean-L1 pattern detection is intentionally rule-based. It can miss errors, over-trigger on ASR mistakes, and should be treated as a targeted practice aid.
+- Learner-profile hints are intentionally rule-based. The current package includes Korean-L1 hints, but they can miss errors, over-trigger on ASR mistakes, and should be treated as targeted practice aids. Contributions for additional L1 profiles are welcome.
 - First-time setup may download model or pronunciation resources. Run `doctor` and `pull-model` before relying on the server in a live session.
 - Temporary WAV recordings are written under the system temp directory so that the last recording can be assessed. By default they are removed when the server exits. Set `MCP_PRONUNCIATION_AUDIO_RETENTION=keep` if you want to inspect them later.
 
 ## Benchmark Status
 
-This project is moving toward benchmark-backed scoring. Planned public benchmark work is tracked in [ROADMAP.md](ROADMAP.md), the testing methodology lives in [docs/TESTING.md](docs/TESTING.md), and the current benchmark helper docs live in [docs/BENCHMARKS.md](docs/BENCHMARKS.md). The primary candidate is Speechocean762 because it has a permissive CC BY 4.0 license and multi-level expert pronunciation scores. L2-ARCTIC is useful for Korean-L1 and phone-error research checks, but its non-commercial license means it should remain optional and separate from default release claims.
+This project is moving toward benchmark-backed scoring. Planned public benchmark work is tracked in [ROADMAP.md](ROADMAP.md), the testing methodology lives in [docs/TESTING.md](docs/TESTING.md), and the current benchmark helper docs live in [docs/BENCHMARKS.md](docs/BENCHMARKS.md). The primary candidate is Speechocean762 because it has a permissive CC BY 4.0 license and multi-level expert pronunciation scores. L2-ARCTIC is useful for phone-error and learner-profile research checks, including Korean-L1 subset review, but its non-commercial license means it should remain optional and separate from default release claims.
 
 ## Publication Status
 

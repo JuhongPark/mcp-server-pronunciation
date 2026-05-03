@@ -6,7 +6,7 @@ Pipeline:
     -> word-level hypothesis tokens + per-word Whisper probability
     -> Needleman-Wunsch alignment vs reference tokens
     -> per-mismatched-word phoneme-sequence diff (CMUdict + g2p_en)
-    -> Korean-L1 pattern scan over alignment + phoneme diffs
+    -> learner-profile pattern scan over alignment + phoneme diffs
     -> librosa-based prosody (word stress / final-rise / intra-clause pauses)
     -> Drill suggestions
     -> AssessmentResult (dict JSON + markdown renderer)
@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Grammar rule table — unchanged from v0.2; Korean learners over-regularize
+# Grammar rule table, unchanged from v0.2.
 # irregular past tenses. Still useful in the converse flow.
 # ---------------------------------------------------------------------------
 
@@ -264,7 +264,7 @@ class AssessmentResult:
         Replaces the old "X heard as Y" list with:
           - alignment table (match/sub/ins/del)
           - phoneme issues (expected vs produced IPA, weak phoneme)
-          - Korean-L1 patterns with tips + drills
+          - learner-profile hints with tips + drills
           - prosody findings
         """
         lines: list[str] = []
@@ -327,9 +327,9 @@ class AssessmentResult:
                 )
             lines.append("")
 
-        # Korean-L1 patterns.
+        # Learner-profile hints.
         if self.korean_l1_patterns:
-            lines.append("### Korean-speaker patterns")
+            lines.append("### Learner-profile hints")
             for p in self.korean_l1_patterns:
                 examples = ", ".join(p.examples[:3])
                 lines.append(f"- **{p.label}** ({p.count}× — {examples})")
@@ -429,10 +429,10 @@ class AssessmentResult:
                 f"(expected {d.expected_ipa})"
             )
 
-        # Top Korean-L1 pattern (single bullet).
+        # Top learner-profile hint (single bullet).
         if self.korean_l1_patterns and len(feedback) < 5:
             p = self.korean_l1_patterns[0]
-            feedback.append(f"**{p.label}**: {p.tip_ko}")
+            feedback.append(f"**Learner profile:** {p.label}: {p.tip_ko}")
 
         if self.prosody.final_rise_on_declarative:
             feedback.append(
@@ -603,7 +603,7 @@ class PronunciationAssessor:
             language_prob=info.language_probability,
         )
 
-        # Alignment + phoneme diffs + Korean patterns run only with a reference.
+        # Alignment + phoneme diffs + learner-profile hints run only with a reference.
         if reference_text:
             self._run_reference_analysis(result, audio_path)
 
@@ -673,7 +673,7 @@ class PronunciationAssessor:
 
         r.aligned = aligned
 
-        # --- timestamps for Korean-L1 pattern examples --------------
+        # --- timestamps for learner-profile hint examples -----------
         ref_timestamps: dict[int, float] = {}
         # Prefer forced-alignment timestamps (cover full audio).
         for idx, (start, _end) in fa_spans.items():
@@ -703,7 +703,7 @@ class PronunciationAssessor:
                 diffs.append(d)
         r.phoneme_diffs = diffs
 
-        # Korean-L1 patterns still run over the full alignment: some patterns
+        # Learner-profile rules still run over the full alignment: some patterns
         # (e.g. article_omission) fire on `del` ops, and cluster-deletion fires
         # on phoneme diffs.
         r.korean_l1_patterns = detect_patterns(aligned, diffs, ref_timestamps)
