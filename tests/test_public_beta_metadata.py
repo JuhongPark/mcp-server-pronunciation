@@ -44,6 +44,24 @@ def test_glama_metadata_declares_maintainer():
     assert metadata["maintainers"] == ["JuhongPark"]
 
 
+def test_readme_exposes_glama_badge():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "https://glama.ai/mcp/servers/JuhongPark/mcp-server-pronunciation" in readme
+    assert "/badges/score.svg" in readme
+
+
+def test_server_metadata_documents_registry_inspection_preload_toggle():
+    server = json.loads((ROOT / "server.json").read_text(encoding="utf-8"))
+    env_names = {
+        env["name"]
+        for package in server["packages"]
+        for env in package.get("environmentVariables", [])
+    }
+
+    assert "MCP_PRONUNCIATION_PRELOAD" in env_names
+
+
 def test_dockerfile_disables_model_preload_for_directory_inspection():
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
 
