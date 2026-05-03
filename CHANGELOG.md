@@ -4,9 +4,9 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Final releases use semantic versioning, and Python pre-releases use PEP 440
-spelling such as `0.3.0b1`.
+spelling such as `0.3.0b2`.
 
-## [0.3.0b1] — Unreleased
+## [0.3.0b2] — Unreleased
 
 ### Beta Notice
 
@@ -15,6 +15,12 @@ spelling such as `0.3.0b1`.
   platform-specific recording issues. Use it for experimentation and
   language-learning practice only, and review outputs carefully before relying
   on them.
+
+### Fixed
+
+- MCP Registry server name now matches the GitHub OIDC namespace casing:
+  `io.github.JuhongPark/pronunciation`.
+- `server.json` description is short enough for MCP Registry validation.
 
 ### Changed
 
@@ -98,7 +104,7 @@ spelling such as `0.3.0b1`.
 - `format_converse_report()` method on `AssessmentResult`, distinct from the
   existing `format_report()` used by drill tools.
 - `server.json` at the repo root for submission to the official MCP Registry
-  (namespace `io.github.juhongpark/pronunciation`).
+  (namespace `io.github.JuhongPark/pronunciation`).
 - `mcp-name:` line in the README for MCP Registry PyPI ownership verification.
 - Release workflow (`.github/workflows/release.yml`) using PyPI Trusted Publishers
   (OIDC) — no long-lived API tokens required.
