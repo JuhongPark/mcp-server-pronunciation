@@ -36,6 +36,7 @@ from .phonemes import (
 )
 from .prosody import ProsodyResult, TimedWord, analyze as prosody_analyze
 from . import forced_align
+from .config import whisper_model_name
 
 if TYPE_CHECKING:
     from faster_whisper import WhisperModel
@@ -496,7 +497,7 @@ def _speed_label(wpm: float) -> str:
 # ---------------------------------------------------------------------------
 
 
-DEFAULT_MODEL = os.environ.get("MCP_PRONUNCIATION_MODEL", "base.en")
+DEFAULT_MODEL = whisper_model_name()
 
 
 def _detect_device() -> tuple[str, str]:
