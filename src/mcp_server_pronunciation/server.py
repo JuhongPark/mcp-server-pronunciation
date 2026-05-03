@@ -9,9 +9,10 @@ import threading
 import atexit
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Annotated, Literal, TYPE_CHECKING
 
 from mcp.server.fastmcp import FastMCP
+from pydantic import Field
 
 from .sentences import SENTENCES
 
@@ -27,6 +28,68 @@ _assessor_lock = threading.Lock()
 _last_recording: Path | None = None
 _last_reference: str | None = None
 _recordings_to_cleanup: set[Path] = set()
+
+Focus = Literal["th", "f_v", "r_l", "vowels", "general"]
+Difficulty = Literal["beginner", "intermediate", "advanced"]
+
+TargetHint = Annotated[
+    str | None,
+    Field(
+        description=(
+            "Optional target sentence or phrase the user is trying to say. "
+            "Leave null for open-ended voice conversation."
+        )
+    ),
+]
+ReferenceText = Annotated[
+    str,
+    Field(description="Exact sentence or phrase the user should read aloud for drill mode."),
+]
+OptionalReferenceText = Annotated[
+    str | None,
+    Field(
+        description=(
+            "Optional expected sentence for the recorded audio. "
+            "When omitted, only transcript and general prosody feedback are returned."
+        )
+    ),
+]
+AudioPath = Annotated[
+    str | None,
+    Field(
+        description=(
+            "Optional local path to a WAV file to assess. "
+            "When omitted, the most recent recording from this server session is used."
+        )
+    ),
+]
+DurationSeconds = Annotated[
+    float,
+    Field(
+        description=(
+            "Maximum recording duration in seconds. "
+            "The server accepts 1 to 120 seconds and auto-stops earlier on silence."
+        )
+    ),
+]
+FocusFilter = Annotated[
+    Focus | None,
+    Field(
+        description=(
+            "Optional pronunciation focus filter. "
+            "Use th, f_v, r_l, vowels, or general. Leave null to choose randomly."
+        )
+    ),
+]
+DifficultyFilter = Annotated[
+    Difficulty | None,
+    Field(
+        description=(
+            "Optional practice difficulty filter. "
+            "Use beginner, intermediate, or advanced. Leave null to choose randomly."
+        )
+    ),
+]
 
 
 def _audio_retention() -> str:
@@ -103,8 +166,8 @@ def _new_recording_path() -> Path:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
-def converse(target_hint: str | None = None, duration: float = 30.0) -> str:
+@mcp.tool(title="Voice conversation with English feedback")
+def converse(target_hint: TargetHint = None, duration: DurationSeconds = 30.0) -> str:
     """
     Record the user speaking, transcribe it, and return the transcript plus quick
     English feedback. This is the primary tool for voice conversations: call it,
@@ -152,10 +215,10 @@ def converse(target_hint: str | None = None, duration: float = 30.0) -> str:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(title="Focused pronunciation drill")
 def practice(
-    reference_text: str,
-    duration: float = 15.0,
+    reference_text: ReferenceText,
+    duration: DurationSeconds = 15.0,
 ) -> str:
     """
     Drill mode: the user reads a specific sentence aloud and gets a detailed
@@ -188,8 +251,8 @@ def practice(
     return result.format_report()
 
 
-@mcp.tool()
-def retry(duration: float = 15.0) -> str:
+@mcp.tool(title="Retry the last pronunciation drill")
+def retry(duration: DurationSeconds = 15.0) -> str:
     """
     Retry the last sentence the user was practicing.
 
@@ -208,11 +271,11 @@ def retry(duration: float = 15.0) -> str:
     return practice(_last_reference, duration)
 
 
-@mcp.tool()
+@mcp.tool(title="Random pronunciation drill")
 def quick_practice(
-    focus: str | None = None,
-    difficulty: str | None = None,
-    duration: float = 15.0,
+    focus: FocusFilter = None,
+    difficulty: DifficultyFilter = None,
+    duration: DurationSeconds = 15.0,
 ) -> str:
     """
     Pick a random practice sentence and drill it immediately.
@@ -256,10 +319,10 @@ def quick_practice(
     return header + result
 
 
-@mcp.tool()
+@mcp.tool(title="Suggest a practice sentence")
 def suggest_sentence(
-    focus: str | None = None,
-    difficulty: str | None = None,
+    focus: FocusFilter = None,
+    difficulty: DifficultyFilter = None,
 ) -> str:
     """
     Suggest a practice sentence the user can read aloud.
@@ -300,8 +363,8 @@ def suggest_sentence(
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
-def record(duration: float = 10.0) -> str:
+@mcp.tool(title="Record microphone audio")
+def record(duration: DurationSeconds = 10.0) -> str:
     """
     Record audio from the microphone without assessing it.
 
@@ -331,8 +394,8 @@ def record(duration: float = 10.0) -> str:
     return f"Recorded {actual_sec:.1f}s of audio to {output_path}"
 
 
-@mcp.tool()
-def assess(reference_text: str | None = None, audio_path: str | None = None) -> str:
+@mcp.tool(title="Assess a recorded pronunciation attempt")
+def assess(reference_text: OptionalReferenceText = None, audio_path: AudioPath = None) -> str:
     """
     Assess the last recording (or a specific audio file) without re-recording.
 
@@ -345,9 +408,9 @@ def assess(reference_text: str | None = None, audio_path: str | None = None) -> 
         against the reference directly.
       - Surfaces per-word phoneme-level feedback (expected vs produced IPA,
         weak phonemes) from CMUdict.
-      - Surfaces learner-profile pronunciation hints and drills. The bundled
-        rule pack currently includes Korean-L1 patterns such as r/l, th→s,
-        final cluster deletion, and intrusive onset vowel.
+      - Surfaces optional learner-profile pronunciation hints and drills when
+        a rule pack matches. The bundled profile includes Korean-L1 patterns
+        such as r/l, th→s, final cluster deletion, and intrusive onset vowel.
       - Adds prosody notes: word-stress placement, sentence-final rising
         intonation on declaratives, intra-clause hesitation pauses.
 
@@ -375,7 +438,7 @@ def assess(reference_text: str | None = None, audio_path: str | None = None) -> 
     return result.format_report()
 
 
-@mcp.tool()
+@mcp.tool(title="Check microphone devices")
 def check_mic() -> str:
     """
     List available audio input devices and verify microphone access.
