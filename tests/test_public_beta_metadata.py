@@ -1,4 +1,4 @@
-"""Tests for public beta metadata consistency."""
+"""Tests for public release metadata consistency."""
 
 import json
 import tomllib
@@ -18,7 +18,7 @@ def test_package_and_server_versions_match():
     assert server["packages"][0]["version"] == project_version
 
 
-def test_beta_version_has_public_beta_disclaimer():
+def test_release_version_has_matching_stability_metadata():
     with (ROOT / "pyproject.toml").open("rb") as f:
         pyproject = tomllib.load(f)
     version = pyproject["project"]["version"]
@@ -30,11 +30,20 @@ def test_beta_version_has_public_beta_disclaimer():
     disclaimer = (ROOT / "DISCLAIMER.md").read_text(encoding="utf-8").lower()
     release_notes = (ROOT / "docs" / "releases" / f"v{version}.md").read_text(encoding="utf-8")
 
-    assert "Development Status :: 4 - Beta" in classifiers
-    assert "public beta notice" in readme
-    assert "early public beta" in disclaimer
-    assert "runtime errors" in disclaimer
-    assert "public beta" in release_notes.lower()
+    if "b" in version:
+        assert "Development Status :: 4 - Beta" in classifiers
+        assert "public beta notice" in readme
+        assert "early public beta" in disclaimer
+        assert "runtime errors" in disclaimer
+        assert "public beta" in release_notes.lower()
+    else:
+        assert "Development Status :: 5 - Production/Stable" in classifiers
+        assert "accuracy and safety notice" in readme
+        assert "public beta notice" not in readme
+        assert "--pre" not in readme
+        assert "early public beta" not in disclaimer
+        assert "runtime errors" in disclaimer
+        assert "stable release" in release_notes.lower()
 
 
 def test_glama_metadata_declares_maintainer():
@@ -60,6 +69,8 @@ def test_server_metadata_documents_registry_inspection_preload_toggle():
     }
 
     assert "MCP_PRONUNCIATION_PRELOAD" in env_names
+    assert "MCP_PRONUNCIATION_AUDIO_RETENTION" in env_names
+    assert "TORCH_HOME" in env_names
 
 
 def test_dockerfile_disables_model_preload_for_directory_inspection():

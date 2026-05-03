@@ -5,10 +5,10 @@ Use this checklist before publishing a package or registry update.
 ## Pre-Release
 
 - Confirm the worktree is clean before starting release steps.
-- For public beta releases, confirm `README.md`, `DISCLAIMER.md`, and release
-  notes clearly state that the project is an early beta and may contain bugs,
-  runtime errors, inaccurate transcripts, inaccurate pronunciation feedback, and
-  platform-specific recording issues.
+- Confirm `README.md`, `DISCLAIMER.md`, and release notes clearly state that
+  pronunciation feedback is a coaching signal and may be inaccurate.
+- For public beta releases, additionally confirm the release is marked as a
+  pre-release and uses the PyPI beta classifier.
 - Run tests and lint:
 
 ```bash
@@ -33,6 +33,8 @@ uv run pytest -v
 
 - Check that `CHANGELOG.md` has a dated entry for the release.
 - Confirm `server.json` points at the intended package version.
+- For a stable release, use a semantic version such as `0.3.0` and a matching
+  tag such as `v0.3.0`.
 - For a beta release, use a PEP 440 beta version such as `0.3.0b3` and a
   matching tag such as `v0.3.0b3`.
 - Confirm the PyPI pending Trusted Publisher exists before the first PyPI
@@ -51,7 +53,17 @@ Confirm the wheel contains `record_mic.ps1`.
 ## Publish
 
 Publishing is handled by the GitHub Actions release workflow through PyPI
-Trusted Publishers. Push a version tag only after the pre-release checks pass.
+Trusted Publishers. Push a version tag only after the release checks pass.
+
+For a stable release:
+
+```bash
+git tag v0.3.0
+git push origin v0.3.0
+gh release create v0.3.0 \
+  --title "v0.3.0" \
+  --notes-file docs/releases/v0.3.0.md
+```
 
 For a public beta, publish a GitHub pre-release and use the beta release notes:
 
@@ -62,13 +74,6 @@ gh release create v0.3.0b3 \
   --title "v0.3.0b3 (public beta)" \
   --notes-file docs/releases/v0.3.0b3.md \
   --prerelease
-```
-
-For a stable release:
-
-```bash
-git tag vX.Y.Z
-git push origin vX.Y.Z
 ```
 
 ## Post-Release

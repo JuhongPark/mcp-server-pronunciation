@@ -4,13 +4,14 @@
 
 <!-- mcp-name: io.github.JuhongPark/pronunciation -->
 
-> **Public beta notice**
+> **Accuracy and safety notice**
 >
-> This project is an early beta and is still under active development. It may
-> contain bugs, runtime errors, inaccurate transcripts, inaccurate pronunciation
-> feedback, or platform-specific recording issues. Use it for experimentation
-> and language-learning practice only, and review outputs carefully before
-> relying on them. See [DISCLAIMER.md](DISCLAIMER.md).
+> This project is a local language-learning practice tool. It may contain bugs,
+> runtime errors, inaccurate transcripts, inaccurate pronunciation feedback, or
+> platform-specific recording issues. Pronunciation feedback is a coaching
+> signal, not a standardized-test, clinical, employment, or high-stakes
+> assessment. Review outputs carefully before relying on them. See
+> [DISCLAIMER.md](DISCLAIMER.md).
 
 An MCP (Model Context Protocol) server that lets you **talk to Claude by voice while getting English pronunciation, grammar, and fluency feedback** in the same turn. Use it for casual voice chat with light coaching, or switch to drill mode when you want to practice a specific sentence.
 
@@ -44,21 +45,27 @@ Voice MCP servers today treat speech as a typing replacement. English tutor MCP 
 
 ## Installation
 
-### Public beta
+### Stable release
 
-Beta releases are pre-releases. Install the current beta explicitly:
+Install the latest stable release:
 
 ```bash
-uvx mcp-server-pronunciation@0.3.0b3
+uvx mcp-server-pronunciation
 ```
 
 For pip users:
 
 ```bash
-pip install --pre mcp-server-pronunciation
+pip install mcp-server-pronunciation
 ```
 
-Run `doctor` before relying on the beta in a live session:
+To pin this release explicitly:
+
+```bash
+uvx mcp-server-pronunciation@0.3.0
+```
+
+Run `doctor` before relying on the server in a live session:
 
 ```bash
 mcp-server-pronunciation doctor
@@ -325,8 +332,9 @@ Claude Desktop launches MCP servers from a GUI-only environment without `~/.loca
 
 ## Known Limitations
 
-- This is a public beta. Bugs, runtime errors, inaccurate feedback, and
-  platform-specific recording issues are expected.
+- This is a stable package release, but the pronunciation and prosody feedback
+  remain experimental coaching signals. Bugs, runtime errors, inaccurate
+  feedback, and platform-specific recording issues can still occur.
 - Pronunciation scores are coaching signals, not standardized-test, clinical, or native-speaker-equivalence judgments.
 - Whisper can still mishear rare names, domain terms, short clips, quiet audio, or heavily accented speech. The optional `[phoneme]` extra reduces some reference-sentence false positives but does not eliminate them.
 - Prosody feedback is heuristic. Pitch tracking can be unreliable with noisy audio, very short utterances, vocal fry, overlapping speech, or clipped recordings.

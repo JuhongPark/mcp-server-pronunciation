@@ -9,7 +9,7 @@ io.github.JuhongPark/pronunciation
 Current public package:
 
 ```text
-uvx mcp-server-pronunciation@0.3.0b3
+uvx mcp-server-pronunciation@0.3.0
 ```
 
 ## Submission Copy
@@ -43,13 +43,13 @@ https://github.com/JuhongPark/mcp-server-pronunciation
 Package:
 
 ```text
-https://pypi.org/project/mcp-server-pronunciation/0.3.0b3/
+https://pypi.org/project/mcp-server-pronunciation/0.3.0/
 ```
 
 Install command:
 
 ```bash
-uvx mcp-server-pronunciation@0.3.0b3
+uvx mcp-server-pronunciation@0.3.0
 ```
 
 Suggested categories:
@@ -74,8 +74,8 @@ mcp, model-context-protocol, pronunciation, voice, speech, english-learning, lan
 
 Status: published.
 
-The server is active in the official registry and `0.3.0b3` is the latest
-published version.
+The server is active in the official registry. Publish `v0.3.0` to make the
+stable package the latest registry version.
 
 ### Glama
 
@@ -118,16 +118,16 @@ be provided by the maintainer rather than committed to this repository.
 
 ### Awesome MCP Servers Lists
 
-Status: branch prepared for `appcypher/awesome-mcp-servers`.
+Status: prepare a pull request for `punkpeye/awesome-mcp-servers`.
 
-Prepared branch:
+Suggested branch:
 
 ```text
 https://github.com/JuhongPark/awesome-mcp-servers/tree/add-pronunciation-voice-coach
 ```
 
-Open a pull request with:
+Open a pull request against the active upstream:
 
 ```text
-https://github.com/appcypher/awesome-mcp-servers/compare/main...JuhongPark:awesome-mcp-servers:add-pronunciation-voice-coach?expand=1
+https://github.com/punkpeye/awesome-mcp-servers/compare/main...JuhongPark:awesome-mcp-servers:add-pronunciation-voice-coach?expand=1
 ```
