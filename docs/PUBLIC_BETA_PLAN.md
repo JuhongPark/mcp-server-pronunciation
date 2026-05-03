@@ -1,23 +1,27 @@
-# Public Beta Release Plan
+# Public Beta Release Plan (Historical)
 
-This document describes how this project should be prepared and released as a
-public beta. The goal is to make the project easy to try while making the risk
-profile clear: this is an early local pronunciation coach, not a stable
-assessment product.
+This historical document describes how this project was prepared and released
+as a public beta before the stable `0.3.0` line. It is retained as release
+history. Current release steps live in [RELEASE.md](RELEASE.md) and current
+publication status lives in [PUBLICATION.md](PUBLICATION.md).
+
+The beta goal was to make the project easy to try while making the risk profile
+clear: this was an early local pronunciation coach, not a stable assessment
+product.
 
 ## Research Summary
 
-The public beta should use standard packaging and release signals:
+The public beta used standard packaging and release signals:
 
-- Python package versions should follow PEP 440. A beta pre-release should use
+- Python package versions should follow PEP 440. A beta pre-release can use
   a version such as `0.3.0b3`.
-- PyPI Trove classifiers should mark maturity with
+- PyPI Trove classifiers marked maturity with
   `Development Status :: 4 - Beta`.
-- GitHub Releases should be marked as pre-releases when the release is not
+- GitHub Releases were marked as pre-releases when the release was not
   ready for production use.
-- MCP Registry metadata should keep the server version and package version
+- MCP Registry metadata kept the server version and package version
   aligned for local servers.
-- Release notes and README installation instructions should state that beta
+- Release notes and README installation instructions stated that beta
   releases may contain bugs, runtime errors, inaccurate feedback, and
   platform-specific recording failures.
 
@@ -34,7 +38,7 @@ References:
 
 ## Beta Disclaimer Text
 
-Use this wording wherever the project is presented to new users:
+This wording was used when the project was presented to beta users:
 
 > Public beta notice: this project is an early beta and is still under active
 > development. It may contain bugs, runtime errors, inaccurate transcripts,
@@ -49,7 +53,7 @@ The short form for release notes is:
 
 ## Release Surface
 
-The beta notice should appear in:
+The beta notice appeared in:
 
 - README near the top, before installation.
 - `DISCLAIMER.md` as a dedicated public-facing disclaimer.
@@ -59,8 +63,8 @@ The beta notice should appear in:
 
 ## Versioning
 
-Use `0.3.0b3` for the current public beta because the current unreleased work is
-already staged as the `0.3.0` line. Keep these fields aligned:
+The beta line used `0.3.0b3` because the unreleased work was already staged as
+the `0.3.0` line. These fields were kept aligned:
 
 - `pyproject.toml` project version.
 - `server.json` top-level version.
@@ -68,22 +72,22 @@ already staged as the `0.3.0` line. Keep these fields aligned:
 - `CHANGELOG.md` release heading.
 - Git tag: `v0.3.0b3`.
 
-For a final stable release of the same feature line, use `0.3.0`.
+The final stable release of the same feature line uses `0.3.0`.
 
 ## Release Steps
 
-1. Add and review the public beta disclaimer.
-2. Update package metadata to the beta version and beta classifier.
-3. Update release docs with beta-specific instructions.
-4. Review [PUBLICATION.md](PUBLICATION.md) and confirm registration
+1. Added and reviewed the public beta disclaimer.
+2. Updated package metadata to the beta version and beta classifier.
+3. Updated release docs with beta-specific instructions.
+4. Reviewed [PUBLICATION.md](PUBLICATION.md) and confirmed registration
    prerequisites.
-5. Run formatting, lint, and tests.
-6. Scan changed files for secrets, private data, bundled datasets, or
+5. Ran formatting, lint, and tests.
+6. Scanned changed files for secrets, private data, bundled datasets, or
    license-incompatible content.
-7. Push the preparation commits to `main`.
-8. Configure the PyPI pending Trusted Publisher from the maintainer's PyPI
+7. Pushed the preparation commits to `main`.
+8. Configured the PyPI pending Trusted Publisher from the maintainer's PyPI
    account.
-9. When ready to publish, create a pre-release tag and GitHub Release:
+9. Created a pre-release tag and GitHub Release:
 
 ```bash
 git tag v0.3.0b3
@@ -94,19 +98,17 @@ gh release create v0.3.0b3 \
   --prerelease
 ```
 
-The tag push will trigger the release workflow. That workflow publishes to PyPI
-first and then publishes `server.json` to the MCP Registry. Do not push the tag
-until the beta disclaimer, metadata, validation checks, and PyPI pending
-Trusted Publisher are in place.
+The tag push triggered the release workflow. That workflow published to PyPI
+first and then published `server.json` to the MCP Registry.
 
 ## Acceptance Criteria
 
-- README clearly labels the project as public beta.
-- Dedicated disclaimer exists and is linked from README.
-- Package and MCP metadata use the same beta version.
-- Release checklist includes beta release steps.
-- Release workflow validates tag and metadata before publishing.
-- Local checks pass:
+- README clearly labelled the project as public beta.
+- Dedicated disclaimer existed and was linked from README.
+- Package and MCP metadata used the same beta version.
+- Release checklist included beta release steps.
+- Release workflow validated tag and metadata before publishing.
+- Local checks passed:
 
 ```bash
 .venv/bin/ruff check .

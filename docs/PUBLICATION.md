@@ -1,22 +1,22 @@
 # Publication Checklist
 
 This repository being public on GitHub is only the source-code publication
-step. For users to discover and install the beta, publish in three places:
+step. For users to discover and install the server, publish in three places:
 
 1. PyPI for the Python package.
-2. GitHub Releases for the beta release page and notes.
+2. GitHub Releases for the release page and notes.
 3. MCP Registry for MCP-server discovery metadata.
 
 ## Current Status
 
-As of the current public beta line:
+As of the current stable line:
 
 - GitHub repository: public.
 - PyPI project: published.
-- GitHub Releases: public beta pre-release published.
+- GitHub Releases: stable release prepared through `docs/releases/v0.3.0.md`.
 - MCP Registry entry: active.
 
-The next prepared beta version is `0.3.0b3`, and the MCP server name is
+The prepared stable version is `0.3.0`, and the MCP server name is
 `io.github.JuhongPark/pronunciation`.
 
 ## PyPI Registration
@@ -40,12 +40,12 @@ Official PyPI docs:
 - https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/
 - https://docs.pypi.org/trusted-publishers/using-a-publisher/
 
-After that PyPI account setup is complete, pushing tag `v0.3.0b3` will trigger
+After that PyPI account setup is complete, pushing tag `v0.3.0` will trigger
 the release workflow and publish:
 
 ```bash
-git tag v0.3.0b3
-git push origin v0.3.0b3
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
 Verify:
@@ -56,13 +56,12 @@ curl -s https://pypi.org/pypi/mcp-server-pronunciation/json
 
 ## GitHub Release
 
-Create a pre-release for the beta:
+Create the GitHub release:
 
 ```bash
-gh release create v0.3.0b3 \
-  --title "v0.3.0b3 (public beta)" \
-  --notes-file docs/releases/v0.3.0b3.md \
-  --prerelease
+gh release create v0.3.0 \
+  --title "v0.3.0" \
+  --notes-file docs/releases/v0.3.0.md
 ```
 
 ## MCP Registry
@@ -101,7 +100,7 @@ Official MCP Registry docs:
 
 1. Confirm checks pass locally.
 2. Create the pending Trusted Publisher on PyPI.
-3. Push tag `v0.3.0b3`.
+3. Push tag `v0.3.0`.
 4. Wait for GitHub Actions to publish to PyPI and then the MCP Registry.
-5. Create or verify the GitHub pre-release.
+5. Create or verify the GitHub release.
 6. Verify PyPI and MCP Registry URLs.

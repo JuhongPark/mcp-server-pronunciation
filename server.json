@@ -3,7 +3,7 @@
   "name": "io.github.JuhongPark/pronunciation",
   "title": "Pronunciation & Voice Coach",
   "description": "Local MCP voice coach with English pronunciation, grammar, and fluency feedback.",
-  "version": "0.3.0b3",
+  "version": "0.3.0",
   "repository": {
     "url": "https://github.com/JuhongPark/mcp-server-pronunciation",
     "source": "github"
@@ -13,7 +13,7 @@
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "mcp-server-pronunciation",
-      "version": "0.3.0b3",
+      "version": "0.3.0",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
@@ -34,6 +34,18 @@
         {
           "name": "MCP_PRONUNCIATION_PRELOAD",
           "description": "Set to 0, false, no, or off to disable background Whisper model preload during registry inspection or Docker smoke tests.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "MCP_PRONUNCIATION_AUDIO_RETENTION",
+          "description": "Temporary WAV retention policy. Use session to delete recordings when the server exits, or keep for manual inspection.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "TORCH_HOME",
+          "description": "Override PyTorch cache directory for optional wav2vec2 forced-alignment weights.",
           "isRequired": false,
           "isSecret": false
         }

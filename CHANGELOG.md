@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Final releases use semantic versioning, and Python pre-releases use PEP 440
 spelling such as `0.3.0b3`.
 
+## [0.3.0] — 2026-05-03
+
+### Added
+
+- Stable MCP smoke coverage for tool discovery and text-only tool calls without
+  audio hardware.
+- Shared configuration parsing for Whisper model selection, model preload, and
+  temporary recording retention.
+- Stable release notes, package metadata, and registry metadata for `0.3.0`.
+
+### Changed
+
+- Project metadata now marks the package as a stable release while keeping
+  accuracy and safety disclaimers for pronunciation feedback.
+- `doctor` now reports configuration checks before probing microphone, model,
+  pronunciation, optional alignment, and disk state.
+- `pull-model` now rejects unsupported model names before attempting a network
+  download.
+
+### Fixed
+
+- Recording failures now return actionable guidance for missing default input
+  devices, microphone permissions, PortAudio issues, empty captures, and WSL
+  PowerShell timeouts.
+
 ## [0.3.0b3] — 2026-05-03
 
 ### Changed
