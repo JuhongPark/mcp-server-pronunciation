@@ -1,7 +1,7 @@
 [project]
 name = "mcp-server-pronunciation"
-version = "0.3.0b2"
-description = "MCP server for voice conversation with Claude plus English pronunciation, grammar, and fluency feedback with phoneme-level analysis and Korean-L1 pattern detection"
+version = "0.3.0b3"
+description = "Local MCP voice coach with English pronunciation, grammar, fluency, phoneme-level feedback, and practice drills"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"

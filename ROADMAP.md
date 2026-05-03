@@ -19,8 +19,8 @@ The public value proposition is:
 - Local audio processing by default.
 - Clear privacy and model-download behavior.
 - Benchmark-backed pronunciation feedback.
-- Strong support for Korean L1 English learners, without making the whole
-  project Korean-only.
+- Extensible learner-profile feedback, with Korean-L1 support currently
+  included.
 - Simple installation through `uvx`, `uv tool`, or `pip`.
 
 ## Development Principles
@@ -108,16 +108,16 @@ Tasks:
 - Use forced-alignment timestamps where available for prosody and pause checks.
 - Make prosody findings conservative when pitch evidence is weak.
 - Add severity levels such as `info`, `practice`, and `important`.
-- Add explicit `learner_l1` configuration. Korean-L1 rules should run when
-  requested or inferred from a Korean-focused practice mode, not as the only
+- Add explicit `learner_l1` configuration. The included Korean-L1 rules should
+  run when requested or inferred from a matching practice mode, not as the only
   possible learner profile.
 
 Success criteria:
 
 - Scoring changes can be compared through benchmark reports.
 - Low-confidence findings are clearly labeled.
-- Korean-L1 feedback remains useful while the default product works for broader
-  English learners.
+- The included Korean-L1 learner profile remains useful while the default
+  product works for broader English learners.
 
 ## Phase 3: Coaching Experience
 
@@ -164,8 +164,8 @@ Success criteria:
 
 ## Phase 5: Extensibility
 
-Goal: grow from a Korean-L1-focused coach into a broader local pronunciation
-assessment toolkit.
+Goal: grow from one included learner profile into a broader local
+pronunciation assessment toolkit.
 
 Tasks:
 
@@ -197,7 +197,8 @@ Primary public benchmark candidate.
 
 ### L2-ARCTIC
 
-Best research benchmark for phone-level error detection and Korean-L1 behavior.
+Best research benchmark for phone-level error detection and learner-profile
+behavior.
 
 - Source: https://psi.engr.tamu.edu/l2-arctic-corpus/
 - Docs: https://psi.engr.tamu.edu/l2-arctic-corpus-docs/
@@ -206,8 +207,8 @@ Best research benchmark for phone-level error detection and Korean-L1 behavior.
   Spanish, and Vietnamese L1 groups.
 - Labels: forced-aligned word and phone boundaries plus manual phone
   substitution, deletion, and addition annotations for a subset.
-- Use: phone error precision/recall/F1, Korean speaker subset checks, alignment
-  robustness, and rule-pack evaluation.
+- Use: phone error precision/recall/F1, L1 subset checks, alignment robustness,
+  and rule-pack evaluation.
 - Constraint: non-commercial license. Keep this out of default public release
   claims and treat it as an optional research benchmark.
 
@@ -265,4 +266,3 @@ Potential future spontaneous-speech benchmark.
 - Do not require GPU or heavy optional dependencies for the default user path.
 - Do not make every conversation turn a detailed pronunciation report.
 - Do not optimize for benchmark scores at the expense of useful coaching.
-

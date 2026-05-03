@@ -33,8 +33,8 @@ uv run pytest -v
 
 - Check that `CHANGELOG.md` has a dated entry for the release.
 - Confirm `server.json` points at the intended package version.
-- For a beta release, use a PEP 440 beta version such as `0.3.0b2` and a
-  matching tag such as `v0.3.0b2`.
+- For a beta release, use a PEP 440 beta version such as `0.3.0b3` and a
+  matching tag such as `v0.3.0b3`.
 - Confirm the PyPI pending Trusted Publisher exists before the first PyPI
   publish. See [PUBLICATION.md](PUBLICATION.md).
 - Run `mcp-server-pronunciation doctor` in a fresh environment when possible.
@@ -56,11 +56,11 @@ Trusted Publishers. Push a version tag only after the pre-release checks pass.
 For a public beta, publish a GitHub pre-release and use the beta release notes:
 
 ```bash
-git tag v0.3.0b2
-git push origin v0.3.0b2
-gh release create v0.3.0b2 \
-  --title "v0.3.0b2 (public beta)" \
-  --notes-file docs/releases/v0.3.0b2.md \
+git tag v0.3.0b3
+git push origin v0.3.0b3
+gh release create v0.3.0b3 \
+  --title "v0.3.0b3 (public beta)" \
+  --notes-file docs/releases/v0.3.0b3.md \
   --prerelease
 ```
 
