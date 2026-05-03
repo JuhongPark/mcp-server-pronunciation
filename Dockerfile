@@ -2,6 +2,7 @@ FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive \
     MCP_PRONUNCIATION_MODEL=tiny.en \
     MCP_PRONUNCIATION_PRELOAD=0
 
@@ -16,3 +17,4 @@ COPY . .
 RUN pip install --no-cache-dir .
 
 ENTRYPOINT ["mcp-server-pronunciation"]
+CMD ["serve"]
