@@ -1,5 +1,7 @@
 # mcp-server-pronunciation
 
+[![mcp-server-pronunciation MCP server](https://glama.ai/mcp/servers/JuhongPark/mcp-server-pronunciation/badges/score.svg)](https://glama.ai/mcp/servers/JuhongPark/mcp-server-pronunciation)
+
 <!-- mcp-name: io.github.JuhongPark/pronunciation -->
 
 > **Public beta notice**
@@ -237,6 +239,17 @@ By default Whisper weights are cached in `~/.cache/huggingface/hub/`. Override w
 
 ```bash
 export HF_HUB_CACHE=/path/to/cache
+```
+
+### Startup preload
+
+By default the server preloads the Whisper model in the background after the
+MCP handshake starts. Set `MCP_PRONUNCIATION_PRELOAD=0` for registry
+inspection, Docker smoke tests, or other environments that only need tool
+discovery and should avoid model downloads:
+
+```bash
+export MCP_PRONUNCIATION_PRELOAD=0
 ```
 
 ### Temporary recordings

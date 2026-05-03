@@ -30,6 +30,12 @@
           "description": "Override Hugging Face Hub cache directory where Whisper weights are stored.",
           "isRequired": false,
           "isSecret": false
+        },
+        {
+          "name": "MCP_PRONUNCIATION_PRELOAD",
+          "description": "Set to 0, false, no, or off to disable background Whisper model preload during registry inspection or Docker smoke tests.",
+          "isRequired": false,
+          "isSecret": false
         }
       ]
     }
