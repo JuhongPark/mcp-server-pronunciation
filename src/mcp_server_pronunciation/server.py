@@ -80,7 +80,13 @@ def _preload_model() -> None:
     thread.start()
 
 
-_preload_model()
+def _preload_enabled() -> bool:
+    value = os.environ.get("MCP_PRONUNCIATION_PRELOAD", "1").strip().lower()
+    return value not in {"0", "false", "no", "off"}
+
+
+if _preload_enabled():
+    _preload_model()
 
 
 def _new_recording_path() -> Path:

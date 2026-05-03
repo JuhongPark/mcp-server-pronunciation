@@ -35,3 +35,18 @@ def test_beta_version_has_public_beta_disclaimer():
     assert "early public beta" in disclaimer
     assert "runtime errors" in disclaimer
     assert "public beta" in release_notes.lower()
+
+
+def test_glama_metadata_declares_maintainer():
+    metadata = json.loads((ROOT / "glama.json").read_text(encoding="utf-8"))
+
+    assert metadata["$schema"] == "https://glama.ai/mcp/schemas/server.json"
+    assert metadata["maintainers"] == ["JuhongPark"]
+
+
+def test_dockerfile_disables_model_preload_for_directory_inspection():
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "MCP_PRONUNCIATION_PRELOAD=0" in dockerfile
+    assert "libportaudio2" in dockerfile
+    assert 'ENTRYPOINT ["mcp-server-pronunciation"]' in dockerfile
