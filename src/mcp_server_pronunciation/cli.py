@@ -15,6 +15,16 @@ import shutil
 import sys
 from pathlib import Path
 
+from .config import (
+    AUDIO_RETENTION_VALUES,
+    DEFAULT_WHISPER_MODEL,
+    SUPPORTED_WHISPER_MODELS,
+    audio_retention_value,
+    is_documented_whisper_model,
+    preload_enabled,
+    whisper_model_name,
+)
+
 
 def _print_header(title: str) -> None:
     print(f"\n== {title} ==", flush=True)
@@ -45,6 +55,36 @@ def doctor() -> int:
         f"  Platform:   {platform.system()} {platform.release()} ({platform.machine()})", flush=True
     )
     print(f"  Executable: {sys.executable}", flush=True)
+
+    _print_header("Configuration")
+    model_size = whisper_model_name()
+    model_ok = is_documented_whisper_model(model_size)
+    _check(
+        "Whisper model setting",
+        model_ok,
+        model_size
+        if model_ok
+        else f"{model_size!r} is not a documented model. Expected one of: "
+        f"{', '.join(SUPPORTED_WHISPER_MODELS)}",
+    )
+    if not model_ok:
+        all_ok = False
+
+    preload_state = "enabled" if preload_enabled() else "disabled"
+    _check("Background model preload", True, preload_state)
+
+    retention_raw = os.environ.get("MCP_PRONUNCIATION_AUDIO_RETENTION")
+    retention = audio_retention_value()
+    retention_ok = retention_raw is None or retention_raw.strip().lower() in AUDIO_RETENTION_VALUES
+    _check(
+        "Temporary recording retention",
+        retention_ok,
+        retention
+        if retention_ok
+        else f"{retention_raw!r} is invalid. Expected one of: {', '.join(AUDIO_RETENTION_VALUES)}",
+    )
+    if not retention_ok:
+        all_ok = False
 
     _print_header("Microphone / PortAudio")
     try:
@@ -93,7 +133,6 @@ def doctor() -> int:
         all_ok = False
 
     _print_header("Whisper model")
-    model_size = os.environ.get("MCP_PRONUNCIATION_MODEL", "base.en")
     print(f"  Target model: {model_size}", flush=True)
     hf_cache = os.environ.get("HF_HUB_CACHE") or os.environ.get("HF_HOME")
     if hf_cache:
@@ -211,7 +250,15 @@ def doctor() -> int:
 
 def pull_model(size: str | None = None) -> int:
     """Pre-download a Whisper model so the first MCP call is instant."""
-    target = size or os.environ.get("MCP_PRONUNCIATION_MODEL", "base.en")
+    target = (size or whisper_model_name()).strip() or DEFAULT_WHISPER_MODEL
+    if not is_documented_whisper_model(target):
+        print(
+            f"ERROR: unsupported Whisper model: {target!r}. "
+            f"Supported models: {', '.join(SUPPORTED_WHISPER_MODELS)}",
+            file=sys.stderr,
+        )
+        return 1
+
     print(f"Downloading Whisper model: {target}", flush=True)
     print("(MIT-licensed weights from openai/whisper via Systran/faster-whisper on HF Hub)")
     try:

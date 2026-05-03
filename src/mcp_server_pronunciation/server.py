@@ -7,13 +7,13 @@ import random
 import tempfile
 import threading
 import atexit
-import os
 from pathlib import Path
 from typing import Annotated, Literal, TYPE_CHECKING
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
+from .config import audio_retention_value, preload_enabled
 from .sentences import SENTENCES
 
 if TYPE_CHECKING:
@@ -93,8 +93,7 @@ DifficultyFilter = Annotated[
 
 
 def _audio_retention() -> str:
-    value = os.environ.get("MCP_PRONUNCIATION_AUDIO_RETENTION", "session").strip().lower()
-    return value if value in {"session", "keep"} else "session"
+    return audio_retention_value()
 
 
 def _cleanup_recordings() -> None:
@@ -144,8 +143,7 @@ def _preload_model() -> None:
 
 
 def _preload_enabled() -> bool:
-    value = os.environ.get("MCP_PRONUNCIATION_PRELOAD", "1").strip().lower()
-    return value not in {"0", "false", "no", "off"}
+    return preload_enabled()
 
 
 if _preload_enabled():

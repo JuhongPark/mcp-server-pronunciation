@@ -70,6 +70,25 @@ def _import_sounddevice():
     return sd
 
 
+def _format_recording_failure(exc: BaseException) -> str:
+    """Return an actionable recording error for end users."""
+    message = str(exc).strip() or exc.__class__.__name__
+    lower = message.lower()
+    hints = ["Run `mcp-server-pronunciation doctor` to check microphone access."]
+
+    if "no default input" in lower or "invalid input device" in lower:
+        hints.append("Set a system default microphone, then run the `check_mic` tool.")
+    if "permission" in lower or "access" in lower or "unanticipated host error" in lower:
+        hints.append(
+            "Check OS microphone privacy permissions for the app launching the MCP server."
+        )
+    if "portaudio" in lower:
+        hints.append("Install or repair PortAudio. On Linux, install `libportaudio2`.")
+
+    hint_text = "\n".join(f"- {hint}" for hint in dict.fromkeys(hints))
+    return f"Recording failed via sounddevice: {message}\n{hint_text}"
+
+
 # Bundled PowerShell script for WSL recording
 _PS1_SCRIPT = Path(__file__).parent / "record_mic.ps1"
 
@@ -218,9 +237,15 @@ def _record_sounddevice_vad(duration: float, output_path: Path) -> None:
             stop_event.wait(timeout=duration)
     except sd.CallbackAbort:
         pass
+    except Exception as e:
+        raise RuntimeError(_format_recording_failure(e)) from e
 
     if not chunks:
-        raise RuntimeError("No audio data captured.")
+        raise RuntimeError(
+            "No audio data captured.\n"
+            "- Speak after the tool starts recording.\n"
+            "- Run `mcp-server-pronunciation doctor` if the microphone appears unavailable."
+        )
 
     audio_data = b"".join(chunks)
     with wave.open(str(output_path), "wb") as wf:
@@ -238,27 +263,39 @@ def _record_wsl(duration: float, output_path: Path) -> None:
     ps1_win = _ps1_win_path()
     win_temp = f"{_windows_temp_dir()}\\pronun_{os.getpid()}_{uuid.uuid4().hex}.wav"
 
-    result = subprocess.run(
-        [
-            "powershell.exe",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            ps1_win,
-            "-Duration",
-            str(int(duration)),
-            "-OutputPath",
-            win_temp,
-            "-SampleRate",
-            str(SAMPLE_RATE),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=duration + 30,
-    )
+    try:
+        result = subprocess.run(
+            [
+                "powershell.exe",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                ps1_win,
+                "-Duration",
+                str(int(duration)),
+                "-OutputPath",
+                win_temp,
+                "-SampleRate",
+                str(SAMPLE_RATE),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=duration + 30,
+        )
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(
+            "PowerShell recording timed out. Check Windows microphone access, then run "
+            "`mcp-server-pronunciation doctor` inside WSL."
+        ) from e
+    except OSError as e:
+        raise RuntimeError(
+            "PowerShell recording could not start. Confirm `powershell.exe` is available "
+            "from WSL and run `mcp-server-pronunciation doctor`."
+        ) from e
 
     if result.returncode != 0:
-        raise RuntimeError(f"PowerShell recording failed: {result.stderr}")
+        detail = result.stderr.strip() or result.stdout.strip() or f"exit code {result.returncode}"
+        raise RuntimeError(f"PowerShell recording failed: {detail}")
 
     # Convert Windows path to WSL and copy
     win_temp_unix = win_temp.replace("\\", "/")
