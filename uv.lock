@@ -972,6 +972,7 @@ dependencies = [
     { name = "librosa" },
     { name = "mcp", extra = ["cli"] },
     { name = "numpy" },
+    { name = "pydantic" },
     { name = "sounddevice" },
 ]
 
@@ -993,6 +994,7 @@ requires-dist = [
     { name = "librosa", specifier = ">=0.10,<1" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.2,<2" },
     { name = "numpy", specifier = ">=1.24,<3" },
+    { name = "pydantic", specifier = ">=2,<3" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
     { name = "sounddevice", specifier = ">=0.4,<0.6" },

@@ -32,6 +32,7 @@ classifiers = [
 ]
 dependencies = [
     "mcp[cli]>=1.2,<2",
+    "pydantic>=2,<3",
     "faster-whisper>=1.0,<2",
     "sounddevice>=0.4,<0.6",
     "numpy>=1.24,<3",
