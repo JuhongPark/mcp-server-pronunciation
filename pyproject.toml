@@ -6,7 +6,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 authors = [
-    { name = "Juhong Park" },
+    { name = "JuhongPark" },
 ]
 keywords = [
     "mcp",
