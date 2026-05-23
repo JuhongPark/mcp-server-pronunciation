@@ -25,13 +25,13 @@ Pronunciation & Voice Coach
 Short description:
 
 ```text
-Local MCP voice coach with English pronunciation, grammar, fluency, phoneme-level feedback, practice drills, and learner-profile hints.
+Local MCP voice coach for Codex, Claude, and other MCP clients with English pronunciation, grammar, fluency, phoneme-level feedback, practice drills, and learner-profile hints.
 ```
 
 Long description:
 
 ```text
-Pronunciation & Voice Coach is a local-first MCP server for voice conversation and English learning feedback. It records from the user's microphone, transcribes speech locally with faster-whisper, and returns pronunciation, grammar, fluency, phoneme-level drill feedback, practice suggestions, and learner-profile hints. It supports Claude Desktop, Claude Code, Cursor, VS Code MCP clients, macOS, Linux, Windows, and WSL2.
+Pronunciation & Voice Coach is a local-first MCP server for voice conversation and English learning feedback. It records from the user's microphone, transcribes speech locally with faster-whisper, and returns pronunciation, grammar, fluency, phoneme-level drill feedback, practice suggestions, and learner-profile hints. It supports Codex CLI, Claude Desktop, Claude Code, Cursor, VS Code MCP clients, macOS, Linux, Windows, and WSL2.
 ```
 
 Repository:

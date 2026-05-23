@@ -154,9 +154,9 @@ class TestFormatReport:
 
 
 class TestFormatConverseReport:
-    def test_has_for_claude_section(self):
+    def test_has_for_assistant_section(self):
         r = _make_result("hello")
-        assert "## For Claude" in r.format_converse_report()
+        assert "## For Assistant" in r.format_converse_report()
 
     def test_surfaces_grammar_error(self):
         r = _make_result("I buyed apples")

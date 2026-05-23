@@ -13,19 +13,19 @@
 > assessment. Review outputs carefully before relying on them. See
 > [DISCLAIMER.md](DISCLAIMER.md).
 
-An MCP (Model Context Protocol) server that lets you **talk to Claude by voice while getting English pronunciation, grammar, and fluency feedback** in the same turn. Use it for casual voice chat with light coaching, or switch to drill mode when you want to practice a specific sentence.
+An MCP (Model Context Protocol) server that lets you **talk to your MCP assistant by voice while getting English pronunciation, grammar, and fluency feedback** in the same turn. Use it for casual voice chat with light coaching, or switch to drill mode when you want to practice a specific sentence.
 
-Built for Claude Desktop, Claude Code, and any other MCP client. Everything runs locally — audio is captured with your mic, transcribed by [`faster-whisper`](https://github.com/SYSTRAN/faster-whisper) on-device, and never leaves your machine.
+Built for Codex CLI, Claude Desktop, Claude Code, Cursor, VS Code, and other MCP clients. Everything runs locally — audio is captured with your mic, transcribed by [`faster-whisper`](https://github.com/SYSTRAN/faster-whisper) on-device, and never leaves your machine.
 
 `mcp-name: io.github.JuhongPark/pronunciation`
 
 ## Why
 
-Voice MCP servers today treat speech as a typing replacement. English tutor MCP servers are text-only. This one combines the two: you speak freely, Claude replies, and feedback on what you just said (pronunciation, grammar, fluency) surfaces inside the same tool call so Claude can weave it into a natural reply — or stay out of the way when you're just chatting.
+Voice MCP servers today treat speech as a typing replacement. English tutor MCP servers are text-only. This one combines the two: you speak freely, your assistant replies, and feedback on what you just said (pronunciation, grammar, fluency) surfaces inside the same tool call so the assistant can weave it into a natural reply — or stay out of the way when you're just chatting.
 
 ## Features
 
-- **Voice conversation** with Claude. Speak, auto-stop on silence, Claude reads your transcript and responds.
+- **Voice conversation** with your MCP assistant. Speak, auto-stop on silence, then let the assistant read your transcript and respond.
 - **Phoneme-level drill feedback** (when a reference sentence is given): Needleman-Wunsch word alignment, per-word expected vs produced IPA, learner-profile hints, minimal-pair drills, and prosody checks (word stress, final-rise intonation, intra-clause pauses).
 - **Extensible learner-profile support**: the current rule pack includes Korean-L1 pronunciation-pattern hints and Korean-language tips. Contributions for additional L1 profiles are welcome.
 - **Whisper-bias mitigation** via optional `[phoneme]` extra: wav2vec2 CTC forced alignment verifies whether the user actually produced each reference word, so rare proper nouns and domain-specific terms that Whisper rewrites toward more common alternatives no longer surface as mispronunciations.
@@ -108,7 +108,7 @@ sudo apt-get install pipewire-alsa
 
 ### First-time check
 
-Before wiring the server into Claude, run the preflight:
+Before wiring the server into an MCP client, run the preflight:
 
 ```bash
 uvx mcp-server-pronunciation doctor
@@ -121,6 +121,12 @@ uvx mcp-server-pronunciation pull-model base.en
 ```
 
 ## Add to your MCP client
+
+### Codex CLI
+
+```bash
+codex mcp add pronunciation -- uvx mcp-server-pronunciation
+```
 
 ### Claude Code
 
@@ -182,31 +188,31 @@ Add to `.vscode/mcp.json` or your user settings:
 
 > **You**: "Let's have a voice chat. I'll ask you about the weekend. Use the converse tool."
 >
-> **Claude** (calls `converse`): *records your speech, transcribes it, notes that you said "buyed" instead of "bought"*
+> **Assistant** (calls `converse`): *records your speech, transcribes it, notes that you said "buyed" instead of "bought"*
 >
-> **Claude**: "Oh nice — what kind of apples did you **buy**? And by the way, the past tense of 'buy' is 'bought' — small thing, but I noticed it."
+> **Assistant**: "Oh nice — what kind of apples did you **buy**? And by the way, the past tense of 'buy' is 'bought' — small thing, but I noticed it."
 
 ### 2. Drill a specific sentence
 
 > **You**: "Give me a sentence to practice with 'th' sounds."
 >
-> **Claude** (calls `suggest_sentence` with `focus=th`): "Try this: *The three brothers thought thoroughly about their future.*"
+> **Assistant** (calls `suggest_sentence` with `focus=th`): "Try this: *The three brothers thought thoroughly about their future.*"
 >
 > **You**: "Record me reading it."
 >
-> **Claude** (calls `practice` with that reference): *returns an alignment table (match / sub / ins / del) with per-word acoustic confidence when the `[phoneme]` extra is installed, phoneme-level issues with expected vs produced IPA, learner-profile hints when applicable, minimal-pair drills, and prosody notes (word stress, final-rise intonation, intra-clause pauses).*
+> **Assistant** (calls `practice` with that reference): *returns an alignment table (match / sub / ins / del) with per-word acoustic confidence when the `[phoneme]` extra is installed, phoneme-level issues with expected vs produced IPA, learner-profile hints when applicable, minimal-pair drills, and prosody notes (word stress, final-rise intonation, intra-clause pauses).*
 
 ### 3. Retry after feedback
 
 > **You**: "Let me try again."
 >
-> **Claude** (calls `retry`): *re-records the same target sentence and compares*
+> **Assistant** (calls `retry`): *re-records the same target sentence and compares*
 
 ## Tools
 
 | Tool | Purpose |
 |---|---|
-| **`converse`** | **Primary**. Record + transcribe + quick feedback + "For Claude" guidance for natural voice-chat-with-coaching. |
+| **`converse`** | **Primary**. Record + transcribe + quick feedback + assistant guidance for natural voice-chat-with-coaching. |
 | `practice` | Drill mode: record user reading a specific reference sentence, return detailed assessment. |
 | `quick_practice` | Pick a random sentence (by phoneme focus + difficulty) and drill it. |
 | `retry` | Re-record the last sentence and compare the new attempt against the previous one. |
@@ -309,9 +315,13 @@ export MCP_PRONUNCIATION_SILENCE_DURATION=2.0
 Run `check_mic` to see the default input device, available device indexes, and
 the active VAD settings.
 
-### Model override in Claude Code
+### Model override in MCP clients
 
 ```bash
+# Codex CLI
+codex mcp add --env MCP_PRONUNCIATION_MODEL=small.en pronunciation -- uvx mcp-server-pronunciation
+
+# Claude Code
 claude mcp add pronunciation -e MCP_PRONUNCIATION_MODEL=small.en -- uvx mcp-server-pronunciation
 ```
 
@@ -350,7 +360,7 @@ uvx mcp-server-pronunciation doctor
 
 ### No audio captured / empty recording
 
-- **macOS**: System Settings → Privacy & Security → Microphone. Grant access to the app that launched Claude Desktop / Claude Code.
+- **macOS**: System Settings → Privacy & Security → Microphone. Grant access to the app that launched your MCP client, such as Codex CLI, Claude Desktop, or Claude Code.
 - **Linux**: Check `pavucontrol` (PulseAudio) or `pw-cli list-objects` (PipeWire) for input levels. On PipeWire-only systems, install `pipewire-alsa`.
 - **WSL2**: Test your mic in Windows Settings → Sound → Input. The server records through Windows, not through WSLg.
 

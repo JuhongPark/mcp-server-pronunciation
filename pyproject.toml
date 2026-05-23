@@ -1,7 +1,7 @@
 [project]
 name = "mcp-server-pronunciation"
 version = "0.3.0"
-description = "Local MCP voice coach with English pronunciation, grammar, fluency, phoneme-level feedback, and practice drills"
+description = "Local MCP voice coach for Codex, Claude, and other MCP clients with English pronunciation, grammar, fluency, phoneme-level feedback, and practice drills"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"

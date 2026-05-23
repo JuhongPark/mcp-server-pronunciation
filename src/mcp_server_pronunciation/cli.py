@@ -3,7 +3,7 @@
 Exposes `doctor` (preflight check) and `pull-model` (pre-download Whisper
 weights) alongside the MCP server entry point. These run outside the MCP
 stdio loop — they're meant for users to run manually once before wiring the
-server into Claude Desktop / Claude Code.
+server into an MCP client such as Codex CLI, Claude Desktop, or Claude Code.
 """
 
 from __future__ import annotations
@@ -299,7 +299,7 @@ def main(argv: list[str] | None = None) -> int:
     """
     parser = argparse.ArgumentParser(
         prog="mcp-server-pronunciation",
-        description="MCP server for voice conversation with Claude + English feedback.",
+        description="MCP server for voice conversation with MCP assistants + English feedback.",
     )
     sub = parser.add_subparsers(dest="command")
 
