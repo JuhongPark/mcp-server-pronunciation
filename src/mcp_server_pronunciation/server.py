@@ -84,7 +84,8 @@ DurationSeconds = Annotated[
     Field(
         description=(
             "Maximum recording duration in seconds. "
-            "The server accepts 1 to 120 seconds and auto-stops earlier on silence."
+            "The server accepts 1 to 120 seconds. Native recording can auto-stop "
+            "earlier on silence; WSL2 PowerShell recording may wait for the full duration."
         )
     ),
 ]
@@ -485,7 +486,7 @@ def _error_response(
     structured_output=True,
 )
 def converse(
-    target_hint: TargetHint = None, duration: DurationSeconds = 30.0
+    target_hint: TargetHint = None, duration: DurationSeconds = 8.0
 ) -> AssessmentCallResult:
     """
     Record the user speaking, transcribe it, and return the transcript plus quick
@@ -493,7 +494,8 @@ def converse(
     read the transcript + feedback, then respond conversationally in your own
     words — weaving the feedback in naturally or mentioning it only if it matters.
 
-    Recording auto-stops when the user finishes speaking (silence detection).
+    Native recording auto-stops when the user finishes speaking. WSL2 may wait
+    for the full requested duration.
 
     Use this tool when:
     - The user wants to chat with you by voice instead of typing
@@ -507,8 +509,9 @@ def converse(
         target_hint: Optional. Only set this if the user is explicitly trying
             to say a specific sentence (e.g. they asked "how do I say X?" and
             you told them X). Leave blank for free-form conversation.
-        duration: Maximum recording duration in seconds (default 30, max 120).
-            Auto-stops earlier on silence.
+        duration: Maximum recording duration in seconds (default 8, max 120).
+            Native recording auto-stops earlier on silence; WSL2 may wait for
+            the full duration.
 
     Returns:
         Markdown report containing the user's transcript, brief English feedback
@@ -532,7 +535,7 @@ def converse(
 )
 def practice(
     reference_text: ReferenceText,
-    duration: DurationSeconds = 15.0,
+    duration: DurationSeconds = 8.0,
 ) -> AssessmentCallResult:
     """
     Drill mode: the user reads a specific sentence aloud and gets a detailed
@@ -541,11 +544,12 @@ def practice(
 
     For voice conversation with casual feedback, use `converse` instead.
 
-    Recording auto-stops when the user finishes speaking.
+    Native recording auto-stops when the user finishes speaking. WSL2 may wait
+    for the full requested duration.
 
     Args:
         reference_text: The sentence the user will read aloud.
-        duration: Maximum recording duration in seconds (default 15, max 120).
+        duration: Maximum recording duration in seconds (default 8, max 120).
 
     Returns:
         Detailed pronunciation assessment report.
@@ -559,7 +563,7 @@ def practice(
     annotations=LOCAL_RECORDING_TOOL,
     structured_output=True,
 )
-def retry(duration: DurationSeconds = 15.0) -> AssessmentCallResult:
+def retry(duration: DurationSeconds = 8.0) -> AssessmentCallResult:
     """
     Retry the last sentence the user was practicing.
 
@@ -568,7 +572,7 @@ def retry(duration: DurationSeconds = 15.0) -> AssessmentCallResult:
     getting feedback.
 
     Args:
-        duration: Maximum recording duration in seconds (default 15, max 120).
+        duration: Maximum recording duration in seconds (default 8, max 120).
 
     Returns:
         Pronunciation assessment report for the new attempt.
@@ -608,7 +612,7 @@ def retry(duration: DurationSeconds = 15.0) -> AssessmentCallResult:
 def quick_practice(
     focus: FocusFilter = None,
     difficulty: DifficultyFilter = None,
-    duration: DurationSeconds = 15.0,
+    duration: DurationSeconds = 8.0,
 ) -> AssessmentCallResult:
     """
     Pick a random practice sentence and drill it immediately.
@@ -621,7 +625,7 @@ def quick_practice(
             If not specified, picks randomly.
         difficulty: Difficulty level. Options: "beginner", "intermediate", "advanced".
             If not specified, picks randomly.
-        duration: Maximum recording duration in seconds (default 15, max 120).
+        duration: Maximum recording duration in seconds (default 8, max 120).
 
     Returns:
         The sentence to read, followed by the pronunciation assessment.
@@ -766,18 +770,18 @@ def troubleshoot_mic() -> str:
 
 
 @mcp.tool(title="Record microphone audio", annotations=LOCAL_RECORDING_TOOL)
-def record(duration: DurationSeconds = 10.0) -> str:
+def record(duration: DurationSeconds = 5.0) -> str:
     """
     Record audio from the microphone without assessing it.
 
-    Recording auto-stops when the user finishes speaking (silence detection).
-    The duration is the maximum time — you don't have to wait the full duration.
+    Native recording auto-stops when the user finishes speaking. WSL2 records
+    through Windows PowerShell and may wait for the full duration.
 
     Most of the time prefer `converse` or `practice`, which record AND analyze
     in one step. Only use `record` alone if you want the raw WAV file.
 
     Args:
-        duration: Maximum recording duration in seconds (default 10, max 120).
+        duration: Maximum recording duration in seconds (default 5, max 120).
 
     Returns:
         Path to the recorded WAV file.
