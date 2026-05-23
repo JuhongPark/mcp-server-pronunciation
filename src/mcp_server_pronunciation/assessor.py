@@ -393,7 +393,7 @@ class AssessmentResult:
         """Conversational flavor of the report for the `converse` tool.
 
         Drops the alignment table and drill list; keeps a couple of
-        high-signal bullets and the "For Claude" guidance block.
+        high-signal bullets and the assistant guidance block.
         """
         lines: list[str] = []
         lines.append("## User said\n")
@@ -454,7 +454,7 @@ class AssessmentResult:
             lines.append("## Quick feedback\n")
             lines.append("- No obvious issues — clear and natural.\n")
 
-        lines.append("## For Claude\n")
+        lines.append("## For Assistant\n")
         if not self.transcript:
             lines.append(
                 "The user's recording was silent or very quiet. Ask them to repeat, "

@@ -1,4 +1,4 @@
-"""MCP server for voice conversation with Claude + English language feedback.
+"""MCP server for voice conversation with MCP assistants + English feedback.
 
 Nothing heavy is imported at package init — `cli_main` and `run` are both
 lazy so that running `mcp-server-pronunciation doctor` doesn't trigger the

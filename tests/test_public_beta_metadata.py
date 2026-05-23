@@ -60,6 +60,20 @@ def test_readme_exposes_glama_badge():
     assert "/badges/score.svg" in readme
 
 
+def test_public_metadata_documents_codex_client_support():
+    with (ROOT / "pyproject.toml").open("rb") as f:
+        pyproject = tomllib.load(f)
+    server = json.loads((ROOT / "server.json").read_text(encoding="utf-8"))
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    directory_copy = (ROOT / "docs" / "MCP_DIRECTORY_SUBMISSIONS.md").read_text(encoding="utf-8")
+
+    assert "Codex" in pyproject["project"]["description"]
+    assert "Codex" in server["description"]
+    assert "Codex CLI" in readme
+    assert "codex mcp add pronunciation -- uvx mcp-server-pronunciation" in readme
+    assert "Codex CLI" in directory_copy
+
+
 def test_server_metadata_documents_registry_inspection_preload_toggle():
     server = json.loads((ROOT / "server.json").read_text(encoding="utf-8"))
     env_names = {

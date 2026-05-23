@@ -1,4 +1,4 @@
-"""MCP server for voice conversation with Claude + English language feedback."""
+"""MCP server for voice conversation with MCP assistants + English feedback."""
 
 from __future__ import annotations
 
@@ -512,8 +512,8 @@ def converse(
 
     Returns:
         Markdown report containing the user's transcript, brief English feedback
-        (pronunciation + grammar + fluency), and a 'For Claude' section with
-        guidance on how to respond.
+        (pronunciation + grammar + fluency), and assistant guidance on how to
+        respond.
     """
     result = _record_and_assess(target_hint, duration)
     report = result.format_converse_report(has_target=target_hint is not None)

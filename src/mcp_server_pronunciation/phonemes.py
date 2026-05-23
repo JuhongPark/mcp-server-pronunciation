@@ -286,7 +286,7 @@ class KoreanL1Pattern:
 
 
 # Static data: per-pattern tip + drill list.
-# Keep tips short — Claude will quote them or paraphrase in the reply.
+# Keep tips short — the assistant may quote them or paraphrase in the reply.
 _PATTERN_META: dict[str, tuple[str, str, list[str]]] = {
     "r_l_swap": (
         "R/L swap",
