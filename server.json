@@ -44,6 +44,24 @@
           "isSecret": false
         },
         {
+          "name": "MCP_PRONUNCIATION_INPUT_DEVICE",
+          "description": "Optional sounddevice input device index or name. Leave unset to use the system default microphone.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "MCP_PRONUNCIATION_VAD_SENSITIVITY",
+          "description": "Voice activity detection sensitivity for native recording. Options: low, normal, high. Default: normal.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "MCP_PRONUNCIATION_SILENCE_DURATION",
+          "description": "Seconds of silence before auto-stop on native recording. Clamped to 0.3-5.0 seconds. Default: 1.5.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
           "name": "TORCH_HOME",
           "description": "Override PyTorch cache directory for optional wav2vec2 forced-alignment weights.",
           "isRequired": false,

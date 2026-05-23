@@ -209,11 +209,28 @@ Add to `.vscode/mcp.json` or your user settings:
 | **`converse`** | **Primary**. Record + transcribe + quick feedback + "For Claude" guidance for natural voice-chat-with-coaching. |
 | `practice` | Drill mode: record user reading a specific reference sentence, return detailed assessment. |
 | `quick_practice` | Pick a random sentence (by phoneme focus + difficulty) and drill it. |
-| `retry` | Re-record the last sentence the user was practicing. |
+| `retry` | Re-record the last sentence and compare the new attempt against the previous one. |
 | `suggest_sentence` | Return a practice sentence without recording. |
 | `record` | Record audio and save a WAV file (raw, no analysis). |
 | `assess` | Assess the last recording (or a specified WAV) without re-recording. When given a reference, runs the full drill pipeline (alignment, phoneme diff, learner-profile hints, prosody). |
 | `check_mic` | List available audio input devices. |
+
+Tools that assess speech also return structured MCP output with `transcript`,
+`clarity_pct`, `speaking_rate_wpm`, `top_issue`, `next_action`,
+`retry_comparison`, the full machine-readable `assessment`, and the rendered
+`report_markdown`. MCP clients can use the structured result to offer a retry,
+surface the top issue, or build a richer practice UI without parsing Markdown.
+
+## Prompt Shortcuts
+
+MCP clients that expose server prompts can start common workflows directly:
+
+| Prompt | Purpose |
+|---|---|
+| `start_voice_chat` | Start a local voice conversation with light feedback. |
+| `daily_practice` | Run a short suggested-sentence practice loop. |
+| `practice_focus` | Start a drill for a chosen focus and difficulty. |
+| `troubleshoot_mic` | Inspect microphone devices and recording settings. |
 
 ## Configuration
 
@@ -270,6 +287,27 @@ export MCP_PRONUNCIATION_AUDIO_RETENTION=session
 
 Set `MCP_PRONUNCIATION_AUDIO_RETENTION=keep` if you want temporary recordings
 to remain on disk for manual inspection.
+
+### Microphone and auto-stop controls
+
+By default the server uses your system default microphone and stops recording
+after 1.5 seconds of detected silence. You can override native `sounddevice`
+recording behavior:
+
+```bash
+# Use a specific input device index or name from the `check_mic` tool
+export MCP_PRONUNCIATION_INPUT_DEVICE=1
+
+# Options: low, normal, high
+# high helps soft speakers; low is better in noisy rooms
+export MCP_PRONUNCIATION_VAD_SENSITIVITY=high
+
+# Seconds of silence before auto-stop, clamped to 0.3-5.0
+export MCP_PRONUNCIATION_SILENCE_DURATION=2.0
+```
+
+Run `check_mic` to see the default input device, available device indexes, and
+the active VAD settings.
 
 ### Model override in Claude Code
 
