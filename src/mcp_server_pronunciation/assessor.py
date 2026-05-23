@@ -38,6 +38,11 @@ from .prosody import ProsodyResult, TimedWord, analyze as prosody_analyze
 from . import forced_align
 from .config import whisper_model_name
 
+try:
+    from huggingface_hub import try_to_load_from_cache
+except Exception:  # pragma: no cover
+    try_to_load_from_cache = None
+
 if TYPE_CHECKING:
     from faster_whisper import WhisperModel
 
@@ -500,6 +505,20 @@ def _speed_label(wpm: float) -> str:
 DEFAULT_MODEL = whisper_model_name()
 
 
+def _resolve_model_source(model_size: str) -> str:
+    path = Path(model_size).expanduser()
+    if path.exists():
+        return str(path)
+
+    if try_to_load_from_cache is None:
+        return model_size
+
+    cached = try_to_load_from_cache(f"Systran/faster-whisper-{model_size}", "model.bin")
+    if isinstance(cached, str):
+        return str(Path(cached).parent)
+    return model_size
+
+
 def _detect_device() -> tuple[str, str]:
     """Auto-detect the best device and compute type for faster-whisper."""
     try:
@@ -525,6 +544,7 @@ class PronunciationAssessor:
         if self._model is None:
             from faster_whisper import WhisperModel
 
+            model_source = _resolve_model_source(self._model_size)
             logger.info(
                 "Loading Whisper model '%s' on %s (%s)...",
                 self._model_size,
@@ -532,7 +552,7 @@ class PronunciationAssessor:
                 self._compute_type,
             )
             self._model = WhisperModel(
-                self._model_size,
+                model_source,
                 device=self._device,
                 compute_type=self._compute_type,
                 cpu_threads=os.cpu_count() or 4,

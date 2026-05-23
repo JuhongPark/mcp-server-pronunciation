@@ -83,7 +83,7 @@ try {
     Start-Sleep -Seconds $Duration
 
     [MciAudio]::Send("stop $alias")
-    [MciAudio]::Send("save $alias $OutputPath")
+    [MciAudio]::Send("save $alias `"$OutputPath`"")
     [MciAudio]::Send("close $alias")
 
     $fileInfo = Get-Item $OutputPath

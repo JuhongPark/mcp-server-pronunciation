@@ -1,9 +1,8 @@
 """Pipeline tests for assessor wiring without loading Whisper or audio models."""
 
 from types import SimpleNamespace
-
 import mcp_server_pronunciation.assessor as assessor_module
-from mcp_server_pronunciation.assessor import PronunciationAssessor
+from mcp_server_pronunciation.assessor import PronunciationAssessor, _resolve_model_source
 from mcp_server_pronunciation.forced_align import ForcedAlignment, ForcedWord
 from mcp_server_pronunciation.prosody import ProsodyResult
 
@@ -32,6 +31,21 @@ def _assessor_with_fake_model(text: str) -> PronunciationAssessor:
     assessor = PronunciationAssessor(model_size="fake")
     assessor._model = _FakeModel(text)
     return assessor
+
+
+def test_cached_whisper_model_uses_local_snapshot(monkeypatch, tmp_path):
+    snapshot = tmp_path / "snapshot"
+    model_bin = snapshot / "model.bin"
+    snapshot.mkdir()
+    model_bin.write_bytes(b"not a real model")
+    monkeypatch.setattr(
+        assessor_module,
+        "try_to_load_from_cache",
+        lambda *_args, **_kwargs: str(model_bin),
+        raising=False,
+    )
+
+    assert _resolve_model_source("base.en") == str(snapshot)
 
 
 def test_assess_reference_pipeline_detects_phoneme_pattern(tmp_path, monkeypatch):

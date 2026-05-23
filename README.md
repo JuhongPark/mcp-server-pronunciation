@@ -296,9 +296,11 @@ to remain on disk for manual inspection.
 
 ### Microphone and auto-stop controls
 
-By default the server uses your system default microphone and stops recording
-after 1.5 seconds of detected silence. You can override native `sounddevice`
-recording behavior:
+By default the server uses your system default microphone. Native
+`sounddevice` recording stops after 1.5 seconds of detected silence. WSL2
+records through Windows PowerShell and may wait for the full requested
+duration, so use a short `duration` value for quick voice checks. You can
+override native recording behavior:
 
 ```bash
 # Use a specific input device index or name from the `check_mic` tool
@@ -340,7 +342,7 @@ Without the extra, `assess` / `practice` still run the full pipeline except for 
 | Windows | sounddevice (bundled PortAudio) | Supported |
 | WSL2 | PowerShell MCI (winmm.dll) | Supported |
 
-**WSL2 note**: WSLg's PulseAudio does not forward microphone audio from the Windows host. This server detects WSL2 automatically and records through PowerShell on the Windows side instead.
+**WSL2 note**: WSLg's PulseAudio does not forward microphone audio from the Windows host. This server detects WSL2 automatically and records through PowerShell on the Windows side instead. WSL2 recording may wait for the full requested duration instead of auto-stopping on silence.
 
 ## Troubleshooting
 

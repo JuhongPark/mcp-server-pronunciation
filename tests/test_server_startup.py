@@ -43,7 +43,7 @@ def test_tool_schemas_include_agent_friendly_parameter_metadata(monkeypatch):
 
     converse_schema = tools_by_name["converse"].inputSchema["properties"]
     assert "target sentence" in converse_schema["target_hint"]["description"]
-    assert "auto-stops earlier on silence" in converse_schema["duration"]["description"]
+    assert "WSL2 PowerShell recording" in converse_schema["duration"]["description"]
 
     quick_practice_schema = tools_by_name["quick_practice"].inputSchema["properties"]
     focus_schema = quick_practice_schema["focus"]["anyOf"][0]
