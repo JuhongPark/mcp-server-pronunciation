@@ -59,3 +59,28 @@ def test_pull_model_rejects_unsupported_model_before_network(capsys):
     captured = capsys.readouterr()
     assert "unsupported Whisper model" in captured.err
     assert "base.en" in captured.err
+
+
+def test_check_audio_devices_reports_configured_vad_and_device(monkeypatch):
+    class FakeSoundDevice:
+        @staticmethod
+        def query_devices(kind=None):
+            if kind == "input":
+                return {"name": "Built-in Mic"}
+            return [
+                {"name": "Speaker", "max_input_channels": 0, "default_samplerate": 48000},
+                {"name": "USB Mic", "max_input_channels": 1, "default_samplerate": 44100},
+            ]
+
+    monkeypatch.setattr(recorder, "_is_wsl", lambda: False)
+    monkeypatch.setattr(recorder, "_import_sounddevice", lambda: FakeSoundDevice)
+    monkeypatch.setenv("MCP_PRONUNCIATION_INPUT_DEVICE", "1")
+    monkeypatch.setenv("MCP_PRONUNCIATION_VAD_SENSITIVITY", "high")
+    monkeypatch.setenv("MCP_PRONUNCIATION_SILENCE_DURATION", "2.0")
+
+    output = recorder.check_audio_devices()
+
+    assert "Configured input device: 1" in output
+    assert "sensitivity=high" in output
+    assert "stop_after=2.0s" in output
+    assert "[1] USB Mic" in output

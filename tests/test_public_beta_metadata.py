@@ -70,6 +70,9 @@ def test_server_metadata_documents_registry_inspection_preload_toggle():
 
     assert "MCP_PRONUNCIATION_PRELOAD" in env_names
     assert "MCP_PRONUNCIATION_AUDIO_RETENTION" in env_names
+    assert "MCP_PRONUNCIATION_INPUT_DEVICE" in env_names
+    assert "MCP_PRONUNCIATION_VAD_SENSITIVITY" in env_names
+    assert "MCP_PRONUNCIATION_SILENCE_DURATION" in env_names
     assert "TORCH_HOME" in env_names
 
 

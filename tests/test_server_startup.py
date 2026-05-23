@@ -4,6 +4,8 @@ import anyio
 import importlib
 import sys
 
+from mcp_server_pronunciation.assessor import AssessmentResult, WordResult
+
 
 def _load_server_without_preload(monkeypatch):
     monkeypatch.setenv("MCP_PRONUNCIATION_PRELOAD", "0")
@@ -54,6 +56,41 @@ def test_tool_schemas_include_agent_friendly_parameter_metadata(monkeypatch):
     assess_schema = tools_by_name["assess"].inputSchema["properties"]
     assert "local path to a WAV file" in assess_schema["audio_path"]["description"]
 
+    assert tools_by_name["check_mic"].annotations.readOnlyHint is True
+    assert tools_by_name["suggest_sentence"].annotations.readOnlyHint is True
+    assert tools_by_name["converse"].annotations.readOnlyHint is False
+    assert tools_by_name["practice"].annotations.destructiveHint is False
+
+    practice_output = tools_by_name["practice"].outputSchema["properties"]
+    assert "report_markdown" in practice_output
+    assert "top_issue" in practice_output
+    assert "next_action" in practice_output
+    assert "retry_comparison" in practice_output
+
+
+def test_prompt_shortcuts_are_discoverable(monkeypatch):
+    server = _load_server_without_preload(monkeypatch)
+    prompts = anyio.run(server.mcp.list_prompts)
+    prompts_by_name = {prompt.name: prompt for prompt in prompts}
+
+    assert set(prompts_by_name) == {
+        "start_voice_chat",
+        "daily_practice",
+        "practice_focus",
+        "troubleshoot_mic",
+    }
+    assert prompts_by_name["start_voice_chat"].title == "Start voice chat"
+    assert prompts_by_name["daily_practice"].arguments[0].name == "focus"
+
+    rendered = anyio.run(
+        server.mcp.get_prompt,
+        "practice_focus",
+        {"focus": "th", "difficulty": "beginner"},
+    )
+    prompt_text = rendered.messages[0].content.text
+    assert "quick_practice" in prompt_text
+    assert "focus=th" in prompt_text
+
 
 def test_mcp_text_only_tools_can_be_called_without_audio_hardware(monkeypatch):
     server = _load_server_without_preload(monkeypatch)
@@ -71,14 +108,41 @@ def test_mcp_text_only_tools_can_be_called_without_audio_hardware(monkeypatch):
     assert "**Focus:** th | **Difficulty:** beginner" in suggestion
     assert "`practice` tool" in suggestion
 
-    content, metadata = anyio.run(server.mcp.call_tool, "retry", {"duration": 1.0})
-    assert content[0].text == metadata["result"]
-    assert "No previous practice session" in content[0].text
+    result = anyio.run(server.mcp.call_tool, "retry", {"duration": 1.0})
+    assert result.isError is True
+    assert "No previous practice session" in result.content[0].text
+    assert result.structuredContent["mode"] == "retry"
+    assert result.structuredContent["next_action"]["tool"] == "practice"
 
-    content, metadata = anyio.run(
+    result = anyio.run(
         server.mcp.call_tool,
         "assess",
         {"reference_text": None, "audio_path": None},
     )
-    assert content[0].text == metadata["result"]
-    assert "No recording found" in content[0].text
+    assert result.isError is True
+    assert result.structuredContent["mode"] == "assessment"
+    assert "No recording found" in result.content[0].text
+
+
+def test_retry_comparison_summarizes_clarity_delta(monkeypatch):
+    server = _load_server_without_preload(monkeypatch)
+
+    previous = AssessmentResult(
+        transcript="i buyed apples",
+        reference_text="I bought apples.",
+        words=[WordResult("i", 0, 0.2, 0.4), WordResult("buyed", 0.3, 0.7, 0.5)],
+        speech_duration_sec=0.6,
+    )
+    current = AssessmentResult(
+        transcript="i bought apples",
+        reference_text="I bought apples.",
+        words=[WordResult("i", 0, 0.2, 0.8), WordResult("bought", 0.3, 0.7, 0.8)],
+        speech_duration_sec=0.6,
+    )
+
+    comparison = server._compare_attempts(previous, current)
+
+    assert comparison.previous_clarity_pct == 45
+    assert comparison.current_clarity_pct == 80
+    assert comparison.clarity_delta == 35
+    assert "improved" in comparison.summary

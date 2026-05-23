@@ -20,8 +20,11 @@ from .config import (
     DEFAULT_WHISPER_MODEL,
     SUPPORTED_WHISPER_MODELS,
     audio_retention_value,
+    input_device_value,
     is_documented_whisper_model,
     preload_enabled,
+    vad_sensitivity_value,
+    vad_silence_duration_seconds,
     whisper_model_name,
 )
 
@@ -72,6 +75,14 @@ def doctor() -> int:
 
     preload_state = "enabled" if preload_enabled() else "disabled"
     _check("Background model preload", True, preload_state)
+
+    _check("Input device override", True, input_device_value() or "system default")
+    _check("VAD sensitivity", True, vad_sensitivity_value())
+    _check(
+        "VAD silence duration",
+        True,
+        f"{vad_silence_duration_seconds():.1f}s",
+    )
 
     retention_raw = os.environ.get("MCP_PRONUNCIATION_AUDIO_RETENTION")
     retention = audio_retention_value()
