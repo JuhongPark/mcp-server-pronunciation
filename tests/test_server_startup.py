@@ -1,6 +1,7 @@
 """Tests for server startup controls."""
 
 import anyio
+import base64
 import importlib
 import sys
 from pathlib import Path
@@ -38,6 +39,7 @@ def test_tool_schemas_include_agent_friendly_parameter_metadata(monkeypatch):
         "retry",
         "quick_practice",
         "open_voice_panel",
+        "analyze_uploaded_audio",
         "start_voice_capture",
         "voice_capture_status",
         "wait_for_voice_capture",
@@ -117,6 +119,7 @@ def test_voice_panel_resource_is_discoverable(monkeypatch):
     assert contents[0].mime_type == "text/html"
     assert "<button" in contents[0].content
     assert "Record" in contents[0].content
+    assert "analyze_uploaded_audio" in contents[0].content
 
 
 def test_mcp_text_only_tools_can_be_called_without_audio_hardware(monkeypatch):
@@ -185,6 +188,35 @@ def test_background_voice_capture_tools_report_progress(monkeypatch):
 
     latest = server.latest_voice_capture()
     assert latest.session_id == started.session_id
+
+
+def test_uploaded_audio_analysis_updates_latest_voice_capture(monkeypatch):
+    server = _load_server_without_preload(monkeypatch)
+
+    class FakeAssessor:
+        def assess(self, audio_path, reference_text=None):
+            assert Path(audio_path).read_bytes() == b"fake wav"
+            return AssessmentResult(
+                transcript="uploaded voice",
+                reference_text=reference_text,
+                words=[WordResult("uploaded", 0.0, 0.4, 0.8)],
+                duration_sec=0.5,
+                speech_duration_sec=0.4,
+            )
+
+    server._voice_service = VoiceSessionService(
+        assessor_factory=lambda: FakeAssessor(),
+        retention=lambda: "keep",
+    )
+
+    result = server.analyze_uploaded_audio(
+        wav_base64=base64.b64encode(b"fake wav").decode("ascii"),
+        mode="conversation",
+    )
+
+    assert result.status == "done"
+    assert result.transcript == "uploaded voice"
+    assert server.latest_voice_capture().session_id == result.session_id
 
 
 def test_retry_comparison_summarizes_clarity_delta(monkeypatch):

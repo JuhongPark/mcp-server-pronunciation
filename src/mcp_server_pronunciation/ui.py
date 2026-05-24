@@ -154,10 +154,178 @@ VOICE_PANEL_HTML = """<!doctype html>
     const levelEl = document.getElementById("level");
     const transcriptEl = document.getElementById("transcript");
     const feedbackEl = document.getElementById("feedback");
-    document.getElementById("record").addEventListener("click", () => {
-      statusEl.textContent = "Panel loaded";
-      feedbackEl.textContent = "Browser recording support will be enabled by the MCP host integration.";
+    const recordButton = document.getElementById("record");
+    const stopButton = document.getElementById("stop");
+    let audioContext = null;
+    let processor = null;
+    let source = null;
+    let stream = null;
+    let chunks = [];
+    let inputSampleRate = 48000;
+
+    function setStatus(value) {
+      statusEl.textContent = value;
+    }
+
+    function flatten(parts) {
+      const length = parts.reduce((total, part) => total + part.length, 0);
+      const out = new Float32Array(length);
+      let offset = 0;
+      for (const part of parts) {
+        out.set(part, offset);
+        offset += part.length;
+      }
+      return out;
+    }
+
+    function resample(samples, fromRate, toRate) {
+      if (fromRate === toRate) return samples;
+      const ratio = fromRate / toRate;
+      const length = Math.round(samples.length / ratio);
+      const out = new Float32Array(length);
+      for (let i = 0; i < length; i += 1) {
+        const sourceIndex = i * ratio;
+        const left = Math.floor(sourceIndex);
+        const right = Math.min(samples.length - 1, left + 1);
+        const weight = sourceIndex - left;
+        out[i] = samples[left] * (1 - weight) + samples[right] * weight;
+      }
+      return out;
+    }
+
+    function encodeWav(floatSamples, sampleRate) {
+      const bytesPerSample = 2;
+      const buffer = new ArrayBuffer(44 + floatSamples.length * bytesPerSample);
+      const view = new DataView(buffer);
+      const writeString = (offset, text) => {
+        for (let i = 0; i < text.length; i += 1) {
+          view.setUint8(offset + i, text.charCodeAt(i));
+        }
+      };
+      writeString(0, "RIFF");
+      view.setUint32(4, 36 + floatSamples.length * bytesPerSample, true);
+      writeString(8, "WAVE");
+      writeString(12, "fmt ");
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * bytesPerSample, true);
+      view.setUint16(32, bytesPerSample, true);
+      view.setUint16(34, 16, true);
+      writeString(36, "data");
+      view.setUint32(40, floatSamples.length * bytesPerSample, true);
+      let offset = 44;
+      for (const sample of floatSamples) {
+        const clamped = Math.max(-1, Math.min(1, sample));
+        view.setInt16(offset, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
+        offset += 2;
+      }
+      return new Uint8Array(buffer);
+    }
+
+    function bytesToBase64(bytes) {
+      let binary = "";
+      const chunkSize = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+      }
+      return btoa(binary);
+    }
+
+    async function callTool(name, args) {
+      if (window.openai && typeof window.openai.callTool === "function") {
+        return window.openai.callTool(name, args);
+      }
+      if (window.mcp && typeof window.mcp.callTool === "function") {
+        return window.mcp.callTool(name, args);
+      }
+      throw new Error("MCP Apps tool bridge is unavailable.");
+    }
+
+    function unwrapResult(result) {
+      if (result && result.structuredContent) return result.structuredContent;
+      if (result && result.result && result.result.structuredContent) {
+        return result.result.structuredContent;
+      }
+      return result || {};
+    }
+
+    async function startRecording() {
+      chunks = [];
+      transcriptEl.textContent = "";
+      feedbackEl.textContent = "";
       levelEl.style.width = "0%";
+      setStatus("Recording");
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+      audioContext = new AudioContext();
+      inputSampleRate = audioContext.sampleRate;
+      source = audioContext.createMediaStreamSource(stream);
+      processor = audioContext.createScriptProcessor(4096, 1, 1);
+      processor.onaudioprocess = event => {
+        const input = event.inputBuffer.getChannelData(0);
+        const copy = new Float32Array(input.length);
+        copy.set(input);
+        chunks.push(copy);
+        let sum = 0;
+        for (const value of input) sum += value * value;
+        const rms = Math.sqrt(sum / input.length);
+        levelEl.style.width = `${Math.min(100, Math.round(rms * 600))}%`;
+      };
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+      recordButton.disabled = true;
+      stopButton.disabled = false;
+    }
+
+    async function stopRecording() {
+      stopButton.disabled = true;
+      recordButton.disabled = false;
+      if (processor) processor.disconnect();
+      if (source) source.disconnect();
+      if (stream) stream.getTracks().forEach(track => track.stop());
+      if (audioContext) await audioContext.close();
+      processor = null;
+      source = null;
+      stream = null;
+      audioContext = null;
+      setStatus("Analyzing");
+      const samples = resample(flatten(chunks), inputSampleRate, 16000);
+      const wav = encodeWav(samples, 16000);
+      const result = unwrapResult(await callTool("analyze_uploaded_audio", {
+        wav_base64: bytesToBase64(wav),
+        mode: "conversation",
+        reference_text: null
+      }));
+      setStatus(result.status || "Done");
+      transcriptEl.textContent = result.transcript || "";
+      feedbackEl.textContent = result.report_markdown || result.error || "";
+    }
+
+    recordButton.addEventListener("click", async () => {
+      try {
+        await startRecording();
+      } catch (error) {
+        setStatus("Error");
+        feedbackEl.textContent = error.message || String(error);
+        recordButton.disabled = false;
+        stopButton.disabled = true;
+      }
+    });
+    stopButton.addEventListener("click", async () => {
+      try {
+        await stopRecording();
+      } catch (error) {
+        setStatus("Error");
+        feedbackEl.textContent = error.message || String(error);
+      }
     });
     document.getElementById("clear").addEventListener("click", () => {
       statusEl.textContent = "Ready";
