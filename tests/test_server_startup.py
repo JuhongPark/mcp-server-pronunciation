@@ -37,6 +37,7 @@ def test_tool_schemas_include_agent_friendly_parameter_metadata(monkeypatch):
         "practice",
         "retry",
         "quick_practice",
+        "open_voice_panel",
         "start_voice_capture",
         "voice_capture_status",
         "wait_for_voice_capture",
@@ -65,6 +66,8 @@ def test_tool_schemas_include_agent_friendly_parameter_metadata(monkeypatch):
 
     assert tools_by_name["check_mic"].annotations.readOnlyHint is True
     assert tools_by_name["suggest_sentence"].annotations.readOnlyHint is True
+    assert tools_by_name["open_voice_panel"].annotations.readOnlyHint is True
+    assert tools_by_name["open_voice_panel"].meta["openai/outputTemplate"].startswith("ui://")
     assert tools_by_name["converse"].annotations.readOnlyHint is False
     assert tools_by_name["practice"].annotations.destructiveHint is False
 
@@ -97,6 +100,23 @@ def test_prompt_shortcuts_are_discoverable(monkeypatch):
     prompt_text = rendered.messages[0].content.text
     assert "quick_practice" in prompt_text
     assert "focus=th" in prompt_text
+
+
+def test_voice_panel_resource_is_discoverable(monkeypatch):
+    server = _load_server_without_preload(monkeypatch)
+
+    resources = anyio.run(server.mcp.list_resources)
+    resources_by_name = {resource.name: resource for resource in resources}
+
+    panel = resources_by_name["voice_panel"]
+    assert str(panel.uri) == "ui://pronunciation/voice-panel"
+    assert panel.mimeType == "text/html"
+    assert panel.meta["io.modelcontextprotocol/ui"]["permissions"] == ["microphone"]
+
+    contents = anyio.run(server.mcp.read_resource, "ui://pronunciation/voice-panel")
+    assert contents[0].mime_type == "text/html"
+    assert "<button" in contents[0].content
+    assert "Record" in contents[0].content
 
 
 def test_mcp_text_only_tools_can_be_called_without_audio_hardware(monkeypatch):
