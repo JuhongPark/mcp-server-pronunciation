@@ -115,16 +115,22 @@ class VoiceSessionService:
 
     def run_session(self, session_id: str, *, raise_errors: bool = True) -> VoiceSession:
         session = self.require_session(session_id)
+        if session.status == "cancelled":
+            return session
         try:
             self._mark(session, "recording", "Recording microphone audio.")
             output_path = self.new_recording_path()
             self._update(session, audio_path=output_path)
             self._record(session.duration, output_path)
+            if self.require_session(session.id).status == "cancelled":
+                return self.require_session(session.id)
 
             self._mark(session, "analyzing", "Transcribing and analyzing pronunciation.")
             result = self._assessor_factory().assess(
                 output_path, reference_text=session.reference_text
             )
+            if self.require_session(session.id).status == "cancelled":
+                return self.require_session(session.id)
             report = self._format_report(result, session.mode, session.reference_text)
             self.complete_session(session.id, result=result, report_markdown=report)
         except Exception as exc:
