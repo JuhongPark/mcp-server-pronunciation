@@ -216,6 +216,11 @@ Add to `.vscode/mcp.json` or your user settings:
 | `practice` | Drill mode: record user reading a specific reference sentence, return detailed assessment. |
 | `quick_practice` | Pick a random sentence (by phoneme focus + difficulty) and drill it. |
 | `retry` | Re-record the last sentence and compare the new attempt against the previous one. |
+| `start_voice_capture` | Start recording in the background and return a session id immediately. |
+| `voice_capture_status` | Check whether a background capture is recording, analyzing, done, cancelled, or failed. |
+| `wait_for_voice_capture` | Wait for a background capture to finish and return transcript + feedback. |
+| `latest_voice_capture` | Return the most recent background voice capture result. |
+| `cancel_voice_capture` | Mark a background capture as cancelled before analysis starts. |
 | `suggest_sentence` | Return a practice sentence without recording. |
 | `record` | Record audio and save a WAV file (raw, no analysis). |
 | `assess` | Assess the last recording (or a specified WAV) without re-recording. When given a reference, runs the full drill pipeline (alignment, phoneme diff, learner-profile hints, prosody). |
@@ -226,6 +231,24 @@ Tools that assess speech also return structured MCP output with `transcript`,
 `retry_comparison`, the full machine-readable `assessment`, and the rendered
 `report_markdown`. MCP clients can use the structured result to offer a retry,
 surface the top issue, or build a richer practice UI without parsing Markdown.
+
+### Visible voice-capture workflow
+
+For MCP clients without an embedded voice UI, use the background capture tools
+to keep the user informed:
+
+```text
+start_voice_capture(duration=8, mode="conversation")
+voice_capture_status(session_id)
+wait_for_voice_capture(session_id, timeout=30)
+latest_voice_capture()
+```
+
+The status response includes `recording`, `analyzing`, `done`, `error`, or
+`cancelled`, plus elapsed time, transcript, clarity, speaking rate, feedback
+markdown, and the full structured assessment when available. On WSL2, keep
+`duration` short because PowerShell recording may wait for the full requested
+duration before analysis begins.
 
 ## Prompt Shortcuts
 
