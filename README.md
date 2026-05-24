@@ -216,6 +216,8 @@ Add to `.vscode/mcp.json` or your user settings:
 | `practice` | Drill mode: record user reading a specific reference sentence, return detailed assessment. |
 | `quick_practice` | Pick a random sentence (by phoneme focus + difficulty) and drill it. |
 | `retry` | Re-record the last sentence and compare the new attempt against the previous one. |
+| `open_voice_panel` | Open the MCP Apps voice panel when the client supports embedded UI. |
+| `analyze_uploaded_audio` | Analyze WAV audio uploaded by the voice panel and store it as the latest voice capture. |
 | `start_voice_capture` | Start recording in the background and return a session id immediately. |
 | `voice_capture_status` | Check whether a background capture is recording, analyzing, done, cancelled, or failed. |
 | `wait_for_voice_capture` | Wait for a background capture to finish and return transcript + feedback. |
@@ -249,6 +251,19 @@ The status response includes `recording`, `analyzing`, `done`, `error`, or
 markdown, and the full structured assessment when available. On WSL2, keep
 `duration` short because PowerShell recording may wait for the full requested
 duration before analysis begins.
+
+### MCP Apps voice panel
+
+Clients that support MCP Apps can call `open_voice_panel` to render the
+`ui://pronunciation/voice-panel` resource. The panel requests browser
+microphone access, records locally in the browser, uploads a WAV clip through
+`analyze_uploaded_audio`, and displays the returned transcript and feedback.
+
+The uploaded clip is stored in the same voice session registry as MCP-only
+recordings, so assistants can call `latest_voice_capture` after the panel
+finishes and respond to both the development note and the pronunciation
+feedback. Clients without MCP Apps support should use the visible
+voice-capture workflow above.
 
 ## Prompt Shortcuts
 
