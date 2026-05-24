@@ -17,6 +17,12 @@ from pydantic import BaseModel, Field
 from .config import audio_retention_value, preload_enabled
 from .sentences import SENTENCES
 from .service import VoiceMode, VoiceSession, VoiceSessionService
+from .ui import (
+    VOICE_PANEL_HTML,
+    VOICE_PANEL_RESOURCE_META,
+    VOICE_PANEL_TOOL_META,
+    VOICE_PANEL_URI,
+)
 
 if TYPE_CHECKING:
     from .assessor import AssessmentResult, PronunciationAssessor
@@ -274,6 +280,18 @@ def _preload_enabled() -> bool:
 
 if _preload_enabled():
     _preload_model()
+
+
+@mcp.resource(
+    VOICE_PANEL_URI,
+    name="voice_panel",
+    title="Pronunciation voice panel",
+    description="MCP Apps panel for visible local voice capture.",
+    mime_type="text/html",
+    meta=VOICE_PANEL_RESOURCE_META,
+)
+def voice_panel_resource() -> str:
+    return VOICE_PANEL_HTML
 
 
 def _new_recording_path() -> Path:
@@ -785,6 +803,25 @@ def quick_practice(
 # ---------------------------------------------------------------------------
 # Background voice capture — visible recording/analyzing/done states
 # ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    title="Open pronunciation voice panel",
+    annotations=READ_ONLY_TOOL,
+    meta=VOICE_PANEL_TOOL_META,
+)
+def open_voice_panel() -> str:
+    """
+    Open the MCP Apps voice panel when the client supports embedded UI.
+
+    Clients without MCP Apps support can use `start_voice_capture`,
+    `voice_capture_status`, and `wait_for_voice_capture` instead.
+    """
+    return (
+        "Open the pronunciation voice panel if your MCP client supports Apps. "
+        f"Panel resource: {VOICE_PANEL_URI}. "
+        "Fallback: use start_voice_capture, voice_capture_status, and wait_for_voice_capture."
+    )
 
 
 @mcp.tool(
