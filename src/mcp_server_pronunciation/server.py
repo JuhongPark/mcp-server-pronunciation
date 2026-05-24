@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import random
+import base64
 import threading
 import atexit
 import time
@@ -89,6 +90,10 @@ AudioPath = Annotated[
             "When omitted, the most recent recording from this server session is used."
         )
     ),
+]
+WavBase64 = Annotated[
+    str,
+    Field(description="Base64-encoded WAV audio captured by a browser voice panel."),
 ]
 SessionId = Annotated[
     str | None,
@@ -822,6 +827,36 @@ def open_voice_panel() -> str:
         f"Panel resource: {VOICE_PANEL_URI}. "
         "Fallback: use start_voice_capture, voice_capture_status, and wait_for_voice_capture."
     )
+
+
+@mcp.tool(
+    title="Analyze uploaded voice-panel audio",
+    annotations=LOCAL_RECORDING_TOOL,
+    structured_output=True,
+)
+def analyze_uploaded_audio(
+    wav_base64: WavBase64,
+    reference_text: OptionalReferenceText = None,
+    mode: VoiceModeFilter = "conversation",
+) -> VoiceCaptureStatusResponse:
+    """
+    Analyze a browser-captured WAV uploaded by an MCP Apps voice panel.
+
+    The analyzed result becomes the latest voice capture so the assistant can
+    retrieve it with `latest_voice_capture`.
+    """
+    service = _get_voice_service()
+    session = service.create_session(mode, 1.0, reference_text)
+    try:
+        audio_bytes = base64.b64decode(wav_base64, validate=True)
+        if not audio_bytes:
+            raise ValueError("Uploaded audio was empty.")
+        output_path = service.new_recording_path()
+        output_path.write_bytes(audio_bytes)
+        session = service.analyze_file(session.id, output_path)
+    except Exception as exc:
+        session = service.fail_session(session.id, str(exc))
+    return _voice_status_response(session)
 
 
 @mcp.tool(

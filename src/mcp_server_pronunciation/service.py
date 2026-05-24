@@ -139,6 +139,33 @@ class VoiceSessionService:
                 raise
         return self.require_session(session.id)
 
+    def analyze_file(
+        self,
+        session_id: str,
+        audio_path: Path,
+        *,
+        raise_errors: bool = True,
+    ) -> VoiceSession:
+        session = self.require_session(session_id)
+        if session.status == "cancelled":
+            return session
+        try:
+            self._update(session, audio_path=audio_path)
+            self._mark(session, "analyzing", "Transcribing and analyzing pronunciation.")
+            result = self._assessor_factory().assess(
+                audio_path,
+                reference_text=session.reference_text,
+            )
+            if self.require_session(session.id).status == "cancelled":
+                return self.require_session(session.id)
+            report = self._format_report(result, session.mode, session.reference_text)
+            self.complete_session(session.id, result=result, report_markdown=report)
+        except Exception as exc:
+            self.fail_session(session.id, str(exc))
+            if raise_errors:
+                raise
+        return self.require_session(session.id)
+
     def complete_session(
         self,
         session_id: str,
