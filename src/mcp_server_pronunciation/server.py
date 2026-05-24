@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import logging
 import random
-import tempfile
 import threading
 import atexit
+import time
 from pathlib import Path
 from typing import Annotated, Any, Literal, TYPE_CHECKING
 
@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from .config import audio_retention_value, preload_enabled
 from .sentences import SENTENCES
+from .service import VoiceMode, VoiceSession, VoiceSessionService
 
 if TYPE_CHECKING:
     from .assessor import AssessmentResult, PronunciationAssessor
@@ -30,10 +31,14 @@ _last_recording: Path | None = None
 _last_reference: str | None = None
 _last_assessment: AssessmentResult | None = None
 _recordings_to_cleanup: set[Path] = set()
+_voice_service: VoiceSessionService | None = None
+_voice_threads: dict[str, threading.Thread] = {}
+_voice_threads_lock = threading.Lock()
 
 Focus = Literal["th", "f_v", "r_l", "vowels", "general"]
 Difficulty = Literal["beginner", "intermediate", "advanced"]
 AssessmentMode = Literal["conversation", "practice", "assessment", "retry"]
+VoiceCaptureMode = Literal["conversation", "practice", "assessment"]
 
 READ_ONLY_TOOL = ToolAnnotations(
     readOnlyHint=True,
@@ -79,6 +84,15 @@ AudioPath = Annotated[
         )
     ),
 ]
+SessionId = Annotated[
+    str | None,
+    Field(
+        description=(
+            "Voice capture session id. Leave null to use the latest session "
+            "when the tool supports it."
+        )
+    ),
+]
 DurationSeconds = Annotated[
     float,
     Field(
@@ -86,6 +100,24 @@ DurationSeconds = Annotated[
             "Maximum recording duration in seconds. "
             "The server accepts 1 to 120 seconds. Native recording can auto-stop "
             "earlier on silence; WSL2 PowerShell recording may wait for the full duration."
+        )
+    ),
+]
+TimeoutSeconds = Annotated[
+    float,
+    Field(
+        description=(
+            "Maximum time in seconds to wait for a background voice capture "
+            "to finish before returning the current status."
+        )
+    ),
+]
+VoiceModeFilter = Annotated[
+    VoiceCaptureMode,
+    Field(
+        description=(
+            "How to analyze the captured voice. Use conversation for open-ended "
+            "speech, practice for a reference sentence, or assessment for a saved clip."
         )
     ),
 ]
@@ -155,6 +187,27 @@ class AssessmentToolResponse(BaseModel):
     error: str | None = None
 
 
+class VoiceCaptureStatusResponse(BaseModel):
+    """Current state of one background voice capture."""
+
+    session_id: str
+    mode: VoiceCaptureMode | Literal["retry"]
+    status: str
+    status_message: str
+    duration: float
+    elapsed_sec: float
+    audio_path: str | None = None
+    transcript: str
+    reference_text: str | None = None
+    clarity_pct: int
+    speaking_rate_wpm: int
+    report_markdown: str
+    top_issue: IssueSummary | None = None
+    next_action: NextAction | None = None
+    assessment: dict[str, Any]
+    error: str | None = None
+
+
 AssessmentCallResult = Annotated[CallToolResult, AssessmentToolResponse]
 
 
@@ -189,6 +242,13 @@ def _get_assessor() -> PronunciationAssessor:
     return _assessor
 
 
+def _get_voice_service() -> VoiceSessionService:
+    global _voice_service
+    if _voice_service is None:
+        _voice_service = VoiceSessionService(_get_assessor)
+    return _voice_service
+
+
 def _preload_model() -> None:
     """Load Whisper weights in a daemon thread so the first tool call is fast.
 
@@ -217,26 +277,23 @@ if _preload_enabled():
 
 
 def _new_recording_path() -> Path:
-    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False, prefix="pronun_")
-    path = Path(tmp.name)
-    tmp.close()
-    if _audio_retention() == "session":
-        _recordings_to_cleanup.add(path)
-    return path
+    return _get_voice_service().new_recording_path()
 
 
-def _record_and_assess(reference_text: str | None, duration: float) -> AssessmentResult:
+def _record_and_assess(
+    reference_text: str | None,
+    duration: float,
+    mode: VoiceMode,
+) -> AssessmentResult:
     global _last_recording, _last_reference, _last_assessment
-    from .recorder import record_audio
 
-    duration = min(max(duration, 1.0), 120.0)
-    output_path = _new_recording_path()
-    record_audio(duration, output_path)
-    _last_recording = output_path
+    session = _get_voice_service().create_session(mode, duration, reference_text)
+    session = _get_voice_service().run_session(session.id)
+    result = session.result
+    if result is None:
+        raise RuntimeError(session.error or "Voice session did not return an assessment.")
+    _last_recording = session.audio_path
     _last_reference = reference_text
-
-    assessor = _get_assessor()
-    result = assessor.assess(output_path, reference_text=reference_text)
     _last_assessment = result
     return result
 
@@ -475,6 +532,73 @@ def _error_response(
     )
 
 
+def _voice_elapsed(session: VoiceSession) -> float:
+    if session.started_at is None:
+        return 0.0
+    end = session.finished_at or time.time()
+    return max(0.0, end - session.started_at)
+
+
+def _voice_status_response(session: VoiceSession) -> VoiceCaptureStatusResponse:
+    result = session.result
+    return VoiceCaptureStatusResponse(
+        session_id=session.id,
+        mode=session.mode,
+        status=session.status,
+        status_message=session.status_message,
+        duration=session.duration,
+        elapsed_sec=round(_voice_elapsed(session), 2),
+        audio_path=str(session.audio_path) if session.audio_path else None,
+        transcript=session.transcript,
+        reference_text=session.reference_text,
+        clarity_pct=session.clarity_pct,
+        speaking_rate_wpm=session.speaking_rate_wpm,
+        report_markdown=session.report_markdown,
+        top_issue=_top_issue(result) if result is not None else None,
+        next_action=_next_action(result, session.mode) if result is not None else None,
+        assessment=session.assessment,
+        error=session.error,
+    )
+
+
+def _session_or_latest(session_id: str | None) -> VoiceSession | None:
+    service = _get_voice_service()
+    if session_id:
+        return service.get_session(session_id)
+    return service.latest_session()
+
+
+def _unknown_session_response(session_id: str | None) -> VoiceCaptureStatusResponse:
+    return VoiceCaptureStatusResponse(
+        session_id=session_id or "",
+        mode="conversation",
+        status="error",
+        status_message="Voice capture session not found.",
+        duration=0.0,
+        elapsed_sec=0.0,
+        transcript="",
+        clarity_pct=0,
+        speaking_rate_wpm=0,
+        report_markdown="Error: Voice capture session not found.",
+        assessment={},
+        error="Voice capture session not found.",
+    )
+
+
+def _start_voice_thread(session_id: str) -> None:
+    def _run() -> None:
+        _get_voice_service().run_session(session_id, raise_errors=False)
+
+    thread = threading.Thread(
+        target=_run,
+        daemon=True,
+        name=f"voice-capture-{session_id[:8]}",
+    )
+    with _voice_threads_lock:
+        _voice_threads[session_id] = thread
+    thread.start()
+
+
 # ---------------------------------------------------------------------------
 # Primary tool — voice conversation with English feedback
 # ---------------------------------------------------------------------------
@@ -518,7 +642,7 @@ def converse(
         (pronunciation + grammar + fluency), and assistant guidance on how to
         respond.
     """
-    result = _record_and_assess(target_hint, duration)
+    result = _record_and_assess(target_hint, duration, "conversation")
     report = result.format_converse_report(has_target=target_hint is not None)
     return _assessment_response(result, "conversation", report)
 
@@ -554,7 +678,7 @@ def practice(
     Returns:
         Detailed pronunciation assessment report.
     """
-    result = _record_and_assess(reference_text, duration)
+    result = _record_and_assess(reference_text, duration, "practice")
     return _assessment_response(result, "practice", result.format_report())
 
 
@@ -588,7 +712,7 @@ def retry(duration: DurationSeconds = 8.0) -> AssessmentCallResult:
             ),
         )
 
-    result = _record_and_assess(_last_reference, duration)
+    result = _record_and_assess(_last_reference, duration, "retry")
     comparison = _compare_attempts(previous, result)
     report = result.format_report()
     if comparison is not None:
@@ -653,9 +777,117 @@ def quick_practice(
         f"---\n\n"
     )
 
-    result = _record_and_assess(text, duration)
+    result = _record_and_assess(text, duration, "practice")
     report = header + result.format_report()
     return _assessment_response(result, "practice", report)
+
+
+# ---------------------------------------------------------------------------
+# Background voice capture — visible recording/analyzing/done states
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    title="Start background voice capture",
+    annotations=LOCAL_RECORDING_TOOL,
+    structured_output=True,
+)
+def start_voice_capture(
+    reference_text: OptionalReferenceText = None,
+    duration: DurationSeconds = 8.0,
+    mode: VoiceModeFilter = "conversation",
+) -> VoiceCaptureStatusResponse:
+    """
+    Start recording in the background and return immediately with a session id.
+
+    Use `voice_capture_status` to show progress while recording or analyzing,
+    then `wait_for_voice_capture` or `latest_voice_capture` to retrieve the
+    transcript and feedback. This is the MCP-only fallback for clients without
+    an embedded voice UI.
+    """
+    session = _get_voice_service().create_session(mode, duration, reference_text)
+    _start_voice_thread(session.id)
+    return _voice_status_response(session)
+
+
+@mcp.tool(
+    title="Check background voice capture status",
+    annotations=READ_ONLY_TOOL,
+    structured_output=True,
+)
+def voice_capture_status(session_id: SessionId = None) -> VoiceCaptureStatusResponse:
+    """
+    Return the current recording/analyzing/done state for a voice session.
+
+    Args:
+        session_id: Session id from `start_voice_capture`. Leave null to inspect
+            the latest voice session.
+    """
+    session = _session_or_latest(session_id)
+    if session is None:
+        return _unknown_session_response(session_id)
+    return _voice_status_response(session)
+
+
+@mcp.tool(
+    title="Wait for background voice capture",
+    annotations=READ_ONLY_TOOL,
+    structured_output=True,
+)
+def wait_for_voice_capture(
+    session_id: SessionId = None,
+    timeout: TimeoutSeconds = 30.0,
+) -> VoiceCaptureStatusResponse:
+    """
+    Wait until a background voice capture reaches done/error/cancelled.
+
+    Returns the latest state if the timeout expires before analysis finishes.
+    """
+    deadline = time.monotonic() + max(0.0, timeout)
+    terminal = {"done", "error", "cancelled"}
+    session = _session_or_latest(session_id)
+    if session is None:
+        return _unknown_session_response(session_id)
+    while session.status not in terminal and time.monotonic() < deadline:
+        time.sleep(0.2)
+        session = _session_or_latest(session.id)
+        if session is None:
+            return _unknown_session_response(session_id)
+    return _voice_status_response(session)
+
+
+@mcp.tool(
+    title="Latest voice capture result",
+    annotations=READ_ONLY_TOOL,
+    structured_output=True,
+)
+def latest_voice_capture() -> VoiceCaptureStatusResponse:
+    """
+    Return the most recent voice capture state, transcript, and feedback.
+    """
+    session = _get_voice_service().latest_session()
+    if session is None:
+        return _unknown_session_response(None)
+    return _voice_status_response(session)
+
+
+@mcp.tool(
+    title="Cancel background voice capture",
+    annotations=LOCAL_RECORDING_TOOL,
+    structured_output=True,
+)
+def cancel_voice_capture(session_id: SessionId = None) -> VoiceCaptureStatusResponse:
+    """
+    Mark a background voice capture as cancelled.
+
+    Platform recording may continue until its requested duration ends, but the
+    session will not proceed to analysis after cancellation is observed.
+    """
+    session = _session_or_latest(session_id)
+    if session is None:
+        return _unknown_session_response(session_id)
+    cancelled = _get_voice_service().cancel_session(session.id)
+    return _voice_status_response(cancelled)
 
 
 @mcp.tool(title="Suggest a practice sentence", annotations=READ_ONLY_TOOL)

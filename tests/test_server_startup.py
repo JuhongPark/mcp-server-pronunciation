@@ -3,8 +3,10 @@
 import anyio
 import importlib
 import sys
+from pathlib import Path
 
 from mcp_server_pronunciation.assessor import AssessmentResult, WordResult
+from mcp_server_pronunciation.service import VoiceSessionService
 
 
 def _load_server_without_preload(monkeypatch):
@@ -35,6 +37,11 @@ def test_tool_schemas_include_agent_friendly_parameter_metadata(monkeypatch):
         "practice",
         "retry",
         "quick_practice",
+        "start_voice_capture",
+        "voice_capture_status",
+        "wait_for_voice_capture",
+        "latest_voice_capture",
+        "cancel_voice_capture",
         "suggest_sentence",
         "record",
         "assess",
@@ -122,6 +129,42 @@ def test_mcp_text_only_tools_can_be_called_without_audio_hardware(monkeypatch):
     assert result.isError is True
     assert result.structuredContent["mode"] == "assessment"
     assert "No recording found" in result.content[0].text
+
+
+def test_background_voice_capture_tools_report_progress(monkeypatch):
+    server = _load_server_without_preload(monkeypatch)
+
+    class FakeAssessor:
+        def assess(self, audio_path, reference_text=None):
+            assert Path(audio_path).exists()
+            return AssessmentResult(
+                transcript="voice note",
+                reference_text=reference_text,
+                words=[WordResult("voice", 0.0, 0.4, 0.9)],
+                duration_sec=0.5,
+                speech_duration_sec=0.4,
+            )
+
+    def recorder(_duration, output_path):
+        output_path.write_bytes(b"fake wav")
+
+    server._voice_service = VoiceSessionService(
+        assessor_factory=lambda: FakeAssessor(),
+        recorder=recorder,
+        retention=lambda: "keep",
+    )
+
+    started = server.start_voice_capture(duration=1.0)
+    assert started.session_id
+    assert started.status in {"idle", "recording", "analyzing", "done"}
+
+    waited = server.wait_for_voice_capture(started.session_id, timeout=3.0)
+    assert waited.status == "done"
+    assert waited.transcript == "voice note"
+    assert waited.clarity_pct == 90
+
+    latest = server.latest_voice_capture()
+    assert latest.session_id == started.session_id
 
 
 def test_retry_comparison_summarizes_clarity_delta(monkeypatch):
