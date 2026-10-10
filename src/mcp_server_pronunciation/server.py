@@ -696,7 +696,11 @@ def _unknown_session_response(session_id: str | None) -> VoiceCaptureStatusRespo
 
 def _start_voice_thread(session_id: str) -> None:
     def _run() -> None:
-        _get_voice_service().run_session(session_id, raise_errors=False)
+        try:
+            _get_voice_service().run_session(session_id, raise_errors=False)
+        finally:
+            with _voice_threads_lock:
+                _voice_threads.pop(session_id, None)
 
     thread = threading.Thread(
         target=_run,

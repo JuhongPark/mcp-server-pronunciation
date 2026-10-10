@@ -22,6 +22,9 @@ VoiceMode = Literal["conversation", "practice", "assessment", "retry"]
 AssessorFactory = Callable[[], "PronunciationAssessor"]
 Recorder = Callable[[float, Path], Path | None]
 
+DEFAULT_MAX_SESSIONS = 50
+TERMINAL_STATUSES: set[VoiceStatus] = {"done", "error", "cancelled"}
+
 
 @dataclass
 class VoiceSession:
@@ -80,10 +83,12 @@ class VoiceSessionService:
         assessor_factory: AssessorFactory,
         recorder: Recorder | None = None,
         retention: Callable[[], str] = audio_retention_value,
+        max_sessions: int | None = DEFAULT_MAX_SESSIONS,
     ) -> None:
         self._assessor_factory = assessor_factory
         self._recorder = recorder
         self._retention = retention
+        self._max_sessions = max_sessions
         self._lock = threading.RLock()
         self._sessions: dict[str, VoiceSession] = {}
         self._latest_id: str | None = None
@@ -101,6 +106,7 @@ class VoiceSessionService:
         with self._lock:
             self._sessions[session.id] = session
             self._latest_id = session.id
+            self._prune_sessions_locked()
         return session
 
     def get_session(self, session_id: str) -> VoiceSession | None:
@@ -112,6 +118,10 @@ class VoiceSessionService:
             if self._latest_id is None:
                 return None
             return self._sessions.get(self._latest_id)
+
+    def session_count(self) -> int:
+        with self._lock:
+            return len(self._sessions)
 
     def run_session(self, session_id: str, *, raise_errors: bool = True) -> VoiceSession:
         session = self.require_session(session_id)
@@ -260,7 +270,25 @@ class VoiceSessionService:
                 setattr(session, key, value)
             session.updated_at = time.time()
             self._latest_id = session.id
+            self._prune_sessions_locked()
             return session
+
+    def _prune_sessions_locked(self) -> None:
+        """Evict older terminal sessions while preserving active work and the latest result."""
+        if self._max_sessions is None or self._max_sessions <= 0:
+            return
+        overflow = len(self._sessions) - self._max_sessions
+        if overflow <= 0:
+            return
+
+        latest_id = self._latest_id
+        terminal_ids = [
+            session_id
+            for session_id, session in self._sessions.items()
+            if session_id != latest_id and session.status in TERMINAL_STATUSES
+        ]
+        for session_id in terminal_ids[:overflow]:
+            self._sessions.pop(session_id, None)
 
     @staticmethod
     def _format_report(

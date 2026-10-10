@@ -210,6 +210,12 @@ def test_background_voice_capture_tools_report_progress(monkeypatch):
     assert waited.status == "done"
     assert waited.transcript == "voice note"
     assert waited.clarity_pct == 90
+    with server._voice_threads_lock:
+        thread = server._voice_threads.get(started.session_id)
+    if thread is not None:
+        thread.join(timeout=3.0)
+    with server._voice_threads_lock:
+        assert started.session_id not in server._voice_threads
 
     latest = server.latest_voice_capture()
     assert latest.session_id == started.session_id
