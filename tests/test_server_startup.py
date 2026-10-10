@@ -1,10 +1,14 @@
 """Tests for server startup controls."""
 
-import anyio
 import base64
 import importlib
+import io
 import sys
+import wave
 from pathlib import Path
+
+import anyio
+import pytest
 
 from mcp_server_pronunciation.assessor import AssessmentResult, WordResult
 from mcp_server_pronunciation.service import VoiceSessionService
@@ -14,6 +18,22 @@ def _load_server_without_preload(monkeypatch):
     monkeypatch.setenv("MCP_PRONUNCIATION_PRELOAD", "0")
     sys.modules.pop("mcp_server_pronunciation.server", None)
     return importlib.import_module("mcp_server_pronunciation.server")
+
+
+def _wav_bytes(
+    *,
+    sample_rate: int = 16000,
+    sample_width: int = 2,
+    channels: int = 1,
+    frames: int = 1600,
+) -> bytes:
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav:
+        wav.setnchannels(channels)
+        wav.setsampwidth(sample_width)
+        wav.setframerate(sample_rate)
+        wav.writeframes(b"\0" * frames * sample_width * channels)
+    return buffer.getvalue()
 
 
 def test_model_preload_can_be_disabled(monkeypatch):
@@ -78,6 +98,11 @@ def test_tool_schemas_include_agent_friendly_parameter_metadata(monkeypatch):
     assert "top_issue" in practice_output
     assert "next_action" in practice_output
     assert "retry_comparison" in practice_output
+
+    upload_output = tools_by_name["analyze_uploaded_audio"].outputSchema["properties"]
+    assert "status" in upload_output
+    assert "session_id" in upload_output
+    assert "report_markdown" in upload_output
 
 
 def test_prompt_shortcuts_are_discoverable(monkeypatch):
@@ -195,7 +220,7 @@ def test_uploaded_audio_analysis_updates_latest_voice_capture(monkeypatch):
 
     class FakeAssessor:
         def assess(self, audio_path, reference_text=None):
-            assert Path(audio_path).read_bytes() == b"fake wav"
+            assert Path(audio_path).read_bytes().startswith(b"RIFF")
             return AssessmentResult(
                 transcript="uploaded voice",
                 reference_text=reference_text,
@@ -210,13 +235,127 @@ def test_uploaded_audio_analysis_updates_latest_voice_capture(monkeypatch):
     )
 
     result = server.analyze_uploaded_audio(
-        wav_base64=base64.b64encode(b"fake wav").decode("ascii"),
+        wav_base64=base64.b64encode(_wav_bytes()).decode("ascii"),
         mode="conversation",
     )
 
-    assert result.status == "done"
-    assert result.transcript == "uploaded voice"
-    assert server.latest_voice_capture().session_id == result.session_id
+    assert result.isError is False
+    assert result.structuredContent["status"] == "done"
+    assert result.structuredContent["transcript"] == "uploaded voice"
+    assert server.latest_voice_capture().session_id == result.structuredContent["session_id"]
+
+
+def test_uploaded_audio_rejects_invalid_base64(monkeypatch):
+    server = _load_server_without_preload(monkeypatch)
+
+    result = server.analyze_uploaded_audio(wav_base64="not-base64", mode="conversation")
+
+    assert result.isError is True
+    assert result.structuredContent["status"] == "error"
+    assert result.structuredContent["error"] == "Uploaded audio must be valid base64 WAV data."
+
+    tool_result = anyio.run(
+        server.mcp.call_tool,
+        "analyze_uploaded_audio",
+        {"wav_base64": "not-base64", "mode": "conversation"},
+    )
+    assert tool_result.isError is True
+    assert tool_result.structuredContent["status"] == "error"
+
+
+def test_uploaded_audio_rejects_non_wav_payload(monkeypatch):
+    server = _load_server_without_preload(monkeypatch)
+
+    result = server.analyze_uploaded_audio(
+        wav_base64=base64.b64encode(b"plain bytes").decode("ascii"),
+        mode="conversation",
+    )
+
+    assert result.isError is True
+    assert result.structuredContent["status"] == "error"
+    assert result.structuredContent["error"] == "Uploaded audio must be a RIFF/WAVE file."
+
+
+def test_uploaded_audio_rejects_oversized_payload(monkeypatch):
+    server = _load_server_without_preload(monkeypatch)
+    monkeypatch.setattr(server, "MAX_UPLOADED_WAV_BYTES", 64)
+
+    result = server.analyze_uploaded_audio(
+        wav_base64=base64.b64encode(_wav_bytes()).decode("ascii"),
+        mode="conversation",
+    )
+
+    assert result.isError is True
+    assert result.structuredContent["status"] == "error"
+    assert "too large" in result.structuredContent["error"]
+
+
+@pytest.mark.parametrize(
+    ("audio_bytes", "message"),
+    [
+        (_wav_bytes()[:-1], "complete PCM frames"),
+        (_wav_bytes()[:20], "RIFF/WAVE file"),
+        (_wav_bytes()[:36] + b"JUNK" + _wav_bytes()[40:], "readable WAV file"),
+        (_wav_bytes(channels=3), "mono or stereo"),
+        (_wav_bytes(sample_width=1), "16-bit PCM"),
+        (_wav_bytes(sample_rate=7999), "between 8 kHz and 48 kHz"),
+        (_wav_bytes(sample_rate=48001), "between 8 kHz and 48 kHz"),
+        (_wav_bytes(frames=0), "no audio frames"),
+    ],
+    ids=[
+        "truncated",
+        "short-header",
+        "missing-data",
+        "channels",
+        "bit-depth",
+        "low-rate",
+        "high-rate",
+        "empty",
+    ],
+)
+def test_uploaded_audio_rejects_invalid_wav_data(monkeypatch, audio_bytes, message):
+    server = _load_server_without_preload(monkeypatch)
+
+    with pytest.raises(ValueError, match=message):
+        server._decode_uploaded_wav(base64.b64encode(audio_bytes).decode("ascii"))
+
+
+@pytest.mark.parametrize("encoded", ["", "  ", "not-base64", "\N{SNOWMAN}"])
+def test_uploaded_audio_rejects_invalid_encoding(monkeypatch, encoded):
+    server = _load_server_without_preload(monkeypatch)
+
+    with pytest.raises(ValueError, match="Uploaded audio"):
+        server._decode_uploaded_wav(encoded)
+
+
+@pytest.mark.parametrize(("channels", "sample_rate"), [(1, 8000), (2, 48000)])
+def test_uploaded_audio_accepts_supported_wav_formats(monkeypatch, channels, sample_rate):
+    server = _load_server_without_preload(monkeypatch)
+    audio_bytes = _wav_bytes(channels=channels, sample_rate=sample_rate)
+
+    assert server._decode_uploaded_wav(base64.b64encode(audio_bytes).decode("ascii")) == audio_bytes
+
+
+def test_uploaded_audio_enforces_duration_limit(monkeypatch):
+    server = _load_server_without_preload(monkeypatch)
+    monkeypatch.setattr(server, "MAX_UPLOADED_WAV_SECONDS", 1.0)
+    at_limit = _wav_bytes(frames=16000)
+    too_long = _wav_bytes(frames=16001)
+
+    assert server._decode_uploaded_wav(base64.b64encode(at_limit).decode("ascii")) == at_limit
+    with pytest.raises(ValueError, match="too long"):
+        server._decode_uploaded_wav(base64.b64encode(too_long).decode("ascii"))
+
+
+def test_uploaded_audio_enforces_decoded_size_limit(monkeypatch):
+    server = _load_server_without_preload(monkeypatch)
+    monkeypatch.setattr(server, "MAX_UPLOADED_WAV_BYTES", 64)
+    at_limit = _wav_bytes(frames=10)
+    too_large = _wav_bytes(frames=11)
+
+    assert server._decode_uploaded_wav(base64.b64encode(at_limit).decode("ascii")) == at_limit
+    with pytest.raises(ValueError, match="too large"):
+        server._decode_uploaded_wav(base64.b64encode(too_large).decode("ascii"))
 
 
 def test_retry_comparison_summarizes_clarity_delta(monkeypatch):

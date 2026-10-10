@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import atexit
+import base64
+import binascii
+import io
 import logging
 import random
-import base64
 import threading
-import atexit
 import time
+import wave
 from pathlib import Path
 from typing import Annotated, Any, Literal, TYPE_CHECKING
 
@@ -41,6 +44,8 @@ _recordings_to_cleanup: set[Path] = set()
 _voice_service: VoiceSessionService | None = None
 _voice_threads: dict[str, threading.Thread] = {}
 _voice_threads_lock = threading.Lock()
+MAX_UPLOADED_WAV_BYTES = 20 * 1024 * 1024
+MAX_UPLOADED_WAV_SECONDS = 120.0
 
 Focus = Literal["th", "f_v", "r_l", "vowels", "general"]
 Difficulty = Literal["beginner", "intermediate", "advanced"]
@@ -93,7 +98,12 @@ AudioPath = Annotated[
 ]
 WavBase64 = Annotated[
     str,
-    Field(description="Base64-encoded WAV audio captured by a browser voice panel."),
+    Field(
+        description=(
+            "Base64-encoded 16-bit PCM RIFF/WAVE audio. "
+            "Use mono or stereo at 8-48 kHz, up to 20 MB and 120 seconds."
+        )
+    ),
 ]
 SessionId = Annotated[
     str | None,
@@ -220,6 +230,7 @@ class VoiceCaptureStatusResponse(BaseModel):
 
 
 AssessmentCallResult = Annotated[CallToolResult, AssessmentToolResponse]
+VoiceCaptureCallResult = Annotated[CallToolResult, VoiceCaptureStatusResponse]
 
 
 def _audio_retention() -> str:
@@ -584,6 +595,81 @@ def _voice_status_response(session: VoiceSession) -> VoiceCaptureStatusResponse:
     )
 
 
+def _voice_status_call_result(
+    session: VoiceSession,
+    *,
+    is_error: bool = False,
+) -> VoiceCaptureCallResult:
+    payload = _voice_status_response(session)
+    text = payload.report_markdown or payload.error or payload.status_message
+    return CallToolResult(
+        content=[TextContent(type="text", text=text)],
+        structuredContent=payload.model_dump(mode="json"),
+        isError=is_error,
+    )
+
+
+def _decode_uploaded_wav(wav_base64: str) -> bytes:
+    encoded = wav_base64.strip()
+    if not encoded:
+        raise ValueError("Uploaded audio was empty.")
+
+    max_base64_chars = ((MAX_UPLOADED_WAV_BYTES + 2) // 3) * 4
+    if len(encoded) > max_base64_chars:
+        raise ValueError(
+            f"Uploaded WAV is too large. Maximum payload is {MAX_UPLOADED_WAV_BYTES // 1024 // 1024} MB."
+        )
+
+    try:
+        audio_bytes = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError("Uploaded audio must be valid base64 WAV data.") from exc
+
+    _validate_uploaded_wav(audio_bytes)
+    return audio_bytes
+
+
+def _validate_uploaded_wav(audio_bytes: bytes) -> None:
+    if not audio_bytes:
+        raise ValueError("Uploaded audio was empty.")
+    if len(audio_bytes) > MAX_UPLOADED_WAV_BYTES:
+        raise ValueError(
+            f"Uploaded WAV is too large. Maximum payload is {MAX_UPLOADED_WAV_BYTES // 1024 // 1024} MB."
+        )
+    if len(audio_bytes) < 44 or audio_bytes[:4] != b"RIFF" or audio_bytes[8:12] != b"WAVE":
+        raise ValueError("Uploaded audio must be a RIFF/WAVE file.")
+
+    try:
+        with wave.open(io.BytesIO(audio_bytes), "rb") as wav:
+            channels = wav.getnchannels()
+            sample_width = wav.getsampwidth()
+            sample_rate = wav.getframerate()
+            frame_count = wav.getnframes()
+            compression = wav.getcomptype()
+            frame_data = wav.readframes(frame_count + 1)
+    except (wave.Error, EOFError) as exc:
+        raise ValueError("Uploaded audio must be a readable WAV file.") from exc
+
+    if compression != "NONE":
+        raise ValueError("Uploaded WAV must use uncompressed PCM audio.")
+    if channels not in {1, 2}:
+        raise ValueError("Uploaded WAV must be mono or stereo.")
+    if sample_width != 2:
+        raise ValueError("Uploaded WAV must use 16-bit PCM samples.")
+    if sample_rate < 8000 or sample_rate > 48000:
+        raise ValueError("Uploaded WAV sample rate must be between 8 kHz and 48 kHz.")
+
+    duration_sec = frame_count / sample_rate if sample_rate else 0.0
+    if duration_sec <= 0:
+        raise ValueError("Uploaded WAV contained no audio frames.")
+    if duration_sec > MAX_UPLOADED_WAV_SECONDS:
+        raise ValueError(
+            f"Uploaded WAV is too long. Maximum duration is {int(MAX_UPLOADED_WAV_SECONDS)} seconds."
+        )
+    if len(frame_data) != frame_count * channels * sample_width:
+        raise ValueError("Uploaded WAV must contain complete PCM frames.")
+
+
 def _session_or_latest(session_id: str | None) -> VoiceSession | None:
     service = _get_voice_service()
     if session_id:
@@ -838,7 +924,7 @@ def analyze_uploaded_audio(
     wav_base64: WavBase64,
     reference_text: OptionalReferenceText = None,
     mode: VoiceModeFilter = "conversation",
-) -> VoiceCaptureStatusResponse:
+) -> VoiceCaptureCallResult:
     """
     Analyze a browser-captured WAV uploaded by an MCP Apps voice panel.
 
@@ -848,15 +934,13 @@ def analyze_uploaded_audio(
     service = _get_voice_service()
     session = service.create_session(mode, 1.0, reference_text)
     try:
-        audio_bytes = base64.b64decode(wav_base64, validate=True)
-        if not audio_bytes:
-            raise ValueError("Uploaded audio was empty.")
+        audio_bytes = _decode_uploaded_wav(wav_base64)
         output_path = service.new_recording_path()
         output_path.write_bytes(audio_bytes)
         session = service.analyze_file(session.id, output_path)
     except Exception as exc:
         session = service.fail_session(session.id, str(exc))
-    return _voice_status_response(session)
+    return _voice_status_call_result(session, is_error=session.status == "error")
 
 
 @mcp.tool(

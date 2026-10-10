@@ -258,6 +258,8 @@ Clients that support MCP Apps can call `open_voice_panel` to render the
 `ui://pronunciation/voice-panel` resource. The panel requests browser
 microphone access, records locally in the browser, uploads a WAV clip through
 `analyze_uploaded_audio`, and displays the returned transcript and feedback.
+Uploaded audio must be a readable 16-bit PCM RIFF/WAVE file with mono or stereo
+audio at 8-48 kHz, no larger than 20 MB and no longer than 120 seconds.
 
 The uploaded clip is stored in the same voice session registry as MCP-only
 recordings, so assistants can call `latest_voice_capture` after the panel
